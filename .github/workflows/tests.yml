@@ -39,8 +39,6 @@ jobs:
       - run: bandit -q -r llm_bench
       - name: Scan publishable files for secrets
         run: |
-          detect-secrets scan \
+          detect-secrets-hook --baseline .secrets.baseline \
             llm_bench tests .github .env.example \
-            benchmark.example.json benchmark.auto.example.json pyproject.toml \
-            > /tmp/llm-speed-bench-secrets.json
-          python -c 'import json; data=json.load(open("/tmp/llm-speed-bench-secrets.json")); assert not data["results"], data["results"]'
+            benchmark.example.json benchmark.auto.example.json pyproject.toml

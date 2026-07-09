@@ -411,6 +411,9 @@ fees, cache discounts, or other account-specific adjustments.
 - Use synthetic prompts for public benchmarks.
 - Treat `results/` as sensitive when `save_responses` is enabled.
 - Rotate any credential that appears in Git history or logs.
+- CI runs `detect-secrets-hook` against publishable files using
+  `.secrets.baseline`. Review new findings before updating the baseline; do not
+  baseline real credentials.
 - See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
 ## Project structure

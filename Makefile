@@ -12,10 +12,9 @@ audit:
 	ruff check . --exclude results
 	mypy llm_bench
 	bandit -q -r llm_bench
-	detect-secrets scan llm_bench tests .github .env.example \
-		benchmark.example.json benchmark.auto.example.json pyproject.toml \
-		> /tmp/llm-speed-bench-secrets.json
-	python3 -c 'import json; data=json.load(open("/tmp/llm-speed-bench-secrets.json")); assert not data["results"], data["results"]'
+	detect-secrets-hook --baseline .secrets.baseline \
+		llm_bench tests .github .env.example \
+		benchmark.example.json benchmark.auto.example.json pyproject.toml
 
 test-one:
 	@test -n "$(TEST)" || (echo "Usage: make test-one TEST=path::test_name" && exit 2)
