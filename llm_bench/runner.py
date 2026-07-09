@@ -20,14 +20,49 @@ from .profiles import evaluate_response, select_profiles
 
 def load_config(path: Path) -> dict[str, Any]:
     config = json.loads(path.read_text())
-    if "prompt" not in config:
-        raise ValueError("config requires 'prompt'")
+    prompts = config.get("prompts", [])
+    if "prompt" not in config and not prompts:
+        raise ValueError("config requires 'prompt' or 'prompts'")
+    if not isinstance(prompts, list):
+        raise ValueError("'prompts' must be a list")
+    prompt_names = []
+    for index, prompt in enumerate(prompts):
+        if not isinstance(prompt, dict):
+            raise ValueError(f"prompts[{index}] must be an object")
+        if not isinstance(prompt.get("name"), str) or not prompt["name"]:
+            raise ValueError(f"prompts[{index}] requires 'name'")
+        if not isinstance(prompt.get("prompt"), str) or not prompt["prompt"]:
+            raise ValueError(f"prompts[{index}] requires a non-empty 'prompt'")
+        prompt_names.append(prompt["name"])
+    if len(prompt_names) != len(set(prompt_names)):
+        raise ValueError("custom prompt names must be unique")
     if not config.get("models") and not config.get("discovery"):
         raise ValueError("config requires 'models' or 'discovery'")
     for index, model in enumerate(config.get("models", [])):
         if "model" not in model:
             raise ValueError(f"models[{index}] requires 'model'")
     return config
+
+
+def select_custom_prompt(config: dict[str, Any], name: str) -> dict[str, Any]:
+    matches = [prompt for prompt in config.get("prompts", []) if prompt["name"] == name]
+    if not matches:
+        available = ", ".join(prompt["name"] for prompt in config.get("prompts", []))
+        suffix = f"; choose {available}" if available else ""
+        raise ValueError(f"unknown custom prompt {name!r}{suffix}")
+    prompt = matches[0]
+    selected = dict(config)
+    selected["prompt_name"] = name
+    selected["prompt"] = prompt["prompt"]
+    if "request" in prompt:
+        selected["request"] = dict(prompt["request"])
+    if prompt.get("system_prompt"):
+        selected.setdefault("request", {})
+        selected["request"] = dict(selected["request"])
+        selected["request"]["system_prompt"] = prompt["system_prompt"]
+    if "validation" in prompt:
+        selected["validation"] = dict(prompt["validation"])
+    return selected
 
 
 def _validate(sample: dict[str, Any], validation: dict[str, Any]) -> None:
@@ -210,6 +245,8 @@ def run_benchmark(
     profile_selector: str | None = None,
     progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
+    if "prompt" not in config:
+        raise ValueError("select a custom prompt before running the benchmark")
     prompt = config["prompt"]
     repetitions = int(config.get("repetitions", 5))
     warmups = int(config.get("warmups", 1))
@@ -303,7 +340,7 @@ def run_benchmark(
                 for future in as_completed(futures):
                     sample = future.result()
                     _validate(sample, validation)
-                    report_sample(sample, "config-prompt")
+                    report_sample(sample, config.get("prompt_name", "config-prompt"))
                     if not config.get("save_responses", False):
                         sample.pop("response", None)
                     samples.append(sample)
@@ -355,6 +392,7 @@ def run_benchmark(
         "run_id": str(uuid.uuid4()),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "benchmark": config.get("name", "llm-benchmark"),
+        "prompt_name": config.get("prompt_name"),
         "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
         "prompt_chars": len(prompt),
         "settings": {
@@ -512,12 +550,17 @@ def _executive_summary(result: dict[str, Any]) -> list[str]:
 
 def report(result: dict[str, Any]) -> str:
     profile_mode = any("profiles" in model for model in result["models"])
+    prompt_label = (
+        f"**{result['prompt_name']}** (`{result['prompt_sha256'][:12]}`)"
+        if result.get("prompt_name")
+        else f"`{result['prompt_sha256'][:12]}`"
+    )
     lines = [
         f"# {result['benchmark']}",
         "",
         f"Run: `{result['run_id']}`  ",
         f"Time: {result['timestamp']}  ",
-        f"Prompt: `{result['prompt_sha256'][:12]}`",
+        f"Prompt: {prompt_label}",
         "",
     ]
     if profile_mode:
@@ -669,6 +712,7 @@ def console_report(result: dict[str, Any], color: bool = False) -> str:
     lines = [
         f"\x1b[1m{result['benchmark']}\x1b[0m" if color else result["benchmark"],
         f"Run {result['run_id']}  •  {result['timestamp']}",
+        *([f"Prompt {result['prompt_name']}"] if result.get("prompt_name") else []),
         "",
         *_terminal_table(headers, rows, colors),
         "",

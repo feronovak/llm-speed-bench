@@ -102,6 +102,89 @@ python3 -m llm_bench.cli benchmark.auto.example.json --interactive
 Model selections accept numbers, a provider such as `openai`, or a provider
 family such as `openrouter/qwen`. Multiple selections are comma-separated.
 
+## Named custom prompts
+
+Define reusable prompts in the configuration when you want to benchmark your
+own requests rather than the built-in profiles. A prompt name is the stable
+selector shown in interactive mode and accepted by the non-interactive CLI:
+
+```json
+{
+  "prompts": [
+    {
+      "name": "csv-review",
+      "system_prompt": "Return concise JSON.",
+      "prompt": "Find invalid rows in this CSV:\norder_id,total\nA-1,20\nA-2,-5",
+      "request": {
+        "temperature": 0,
+        "max_output_tokens": 500
+      },
+      "validation": {
+        "contains": "A-2"
+      }
+    },
+    {
+      "name": "long-summary",
+      "prompt": "Summarize the supplied long text in five bullets."
+    }
+  ],
+  "models": [
+    {
+      "provider": "openai",
+      "model": "gpt-5.4-mini"
+    }
+  ]
+}
+```
+
+Select one without interaction:
+
+```bash
+python3 -m llm_bench.cli benchmark.json --prompt csv-review
+```
+
+Or use `--interactive`; custom prompt names are listed after the built-in
+profiles. A configuration may retain the legacy top-level `prompt` as its
+default, or contain only `prompts` and require an explicit selection. Long text
+and CSV content can be embedded using JSON newline escapes. Do not place
+confidential data in a configuration that will be committed to source control.
+
+### Example: source text to structured quiz
+
+Both checked-in example configurations include a `source-to-quiz` prompt. It
+asks each selected model to turn a short source passage into exactly four
+questions covering multiple-choice, true-or-false, and short-answer formats.
+The response must be JSON and include stable question IDs, answers, plausible
+options, and source-grounded explanations. This exercises instruction
+following, constrained generation, source fidelity, and structured output in a
+single request.
+
+Run the demo directly against the dynamically discovered model set:
+
+```bash
+python3 -m llm_bench.cli benchmark.auto.example.json \
+  --prompt source-to-quiz
+```
+
+In interactive mode, select models first, then enter the prompt name:
+
+```text
+Profiles:
+  1. chat-fast — ...
+  ...
+Custom prompts:
+  source-to-quiz
+Select profiles (numbers/all), a custom prompt name, or Enter for the config prompt: source-to-quiz
+```
+
+The demo's prompt-level `request` controls temperature and output length for
+this test. Its validation regex checks that the response contains a
+`questions` JSON array. That is a basic structural gate, not a full assessment
+of quiz correctness or JSON Schema compliance; review saved responses when
+comparing content quality. Set top-level `"save_responses": true` temporarily
+if you want raw model output in the result, and avoid doing so with sensitive
+source material.
+
 Then benchmark the dynamically selected set:
 
 ```bash

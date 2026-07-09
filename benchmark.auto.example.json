@@ -12,6 +12,20 @@
   "validation": {
     "regex": "\\S+"
   },
+  "prompts": [
+    {
+      "name": "source-to-quiz",
+      "system_prompt": "You are an assessment designer. Use only the supplied source text. Return valid JSON with no Markdown fences or commentary.",
+      "prompt": "Create a four-question quiz from the source text below.\n\nRequirements:\n- Include exactly two multiple-choice questions, one true-or-false question, and one short-answer question.\n- Test understanding and inference, not simple phrase matching.\n- Give each question a stable id from q1 through q4.\n- For multiple-choice questions, provide exactly four plausible options and identify the correct option by its text.\n- For every question, include the correct answer and a one-sentence explanation grounded in the source.\n- Do not introduce facts that are absent from the source.\n\nReturn this JSON shape:\n{\"title\":\"...\",\"questions\":[{\"id\":\"q1\",\"type\":\"multiple_choice|true_false|short_answer\",\"question\":\"...\",\"options\":[\"...\"],\"answer\":\"...\",\"explanation\":\"...\"}]}\n\nSource text:\nUrban trees can lower nearby surface temperatures by providing shade and releasing water vapor through transpiration. Their cooling effect varies with canopy size, species, soil moisture, and the arrangement of streets and buildings. Trees can also reduce storm-water runoff by intercepting rainfall, but poorly chosen species may damage pavements or struggle during drought. Because benefits and risks differ by location, successful planting programs combine canopy targets with local site assessment, maintenance funding, and monitoring over time.",
+      "request": {
+        "temperature": 0,
+        "max_output_tokens": 1200
+      },
+      "validation": {
+        "regex": "\"questions\"\\s*:\\s*\\["
+      }
+    }
+  ],
   "discovery": [
     {
       "provider": "xai",

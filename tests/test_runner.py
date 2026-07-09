@@ -2,7 +2,47 @@ import stat
 
 import pytest
 
-from llm_bench.runner import console_report, report, run_benchmark, save_result
+from llm_bench.runner import (
+    console_report,
+    load_config,
+    report,
+    run_benchmark,
+    save_result,
+    select_custom_prompt,
+)
+
+
+def test_load_config_accepts_named_prompts_without_legacy_prompt(tmp_path):
+    path = tmp_path / "benchmark.json"
+    path.write_text(
+        '{"prompts":[{"name":"csv-review","prompt":"Review this CSV"}],'
+        '"models":[{"model":"fake"}]}'
+    )
+
+    assert load_config(path)["prompts"][0]["name"] == "csv-review"
+
+
+def test_select_custom_prompt_applies_named_request_and_validation():
+    config = {
+        "prompts": [
+            {
+                "name": "csv-review",
+                "prompt": "Review this CSV",
+                "system_prompt": "Return JSON.",
+                "request": {"temperature": 0, "max_output_tokens": 500},
+                "validation": {"contains": "rows"},
+            }
+        ],
+        "models": [{"model": "fake"}],
+    }
+
+    selected = select_custom_prompt(config, "csv-review")
+
+    assert selected["prompt_name"] == "csv-review"
+    assert selected["prompt"] == "Review this CSV"
+    assert selected["request"]["system_prompt"] == "Return JSON."
+    assert selected["request"]["max_output_tokens"] == 500
+    assert selected["validation"] == {"contains": "rows"}
 
 
 def test_report_handles_missing_usage():
@@ -11,6 +51,7 @@ def test_report_handles_missing_usage():
         "run_id": "abc",
         "timestamp": "2026-01-01T00:00:00Z",
         "prompt_sha256": "1234567890abcdef",
+        "prompt_name": "csv-review",
         "models": [
             {
                 "name": "model-a",
@@ -25,6 +66,7 @@ def test_report_handles_missing_usage():
         ],
     }
     rendered = report(result)
+    assert "Prompt: **csv-review** (`1234567890ab`)" in rendered
     assert "| model-a | 100% | 1.000s | 2.000s | n/a | n/a | n/a |" in rendered
 
 

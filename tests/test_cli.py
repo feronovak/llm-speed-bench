@@ -51,6 +51,63 @@ def test_interactive_selection_can_cancel(monkeypatch):
     assert selected is None
 
 
+def test_interactive_selection_lists_and_selects_named_custom_prompt(monkeypatch):
+    monkeypatch.setattr(
+        "llm_bench.cli.resolve_models",
+        lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
+    )
+    output = []
+    answers = iter(["all", "csv-review", "", "y"])
+
+    selected = interactive_selection(
+        {
+            "prompts": [
+                {"name": "csv-review", "prompt": "Review this CSV"},
+                {"name": "long-summary", "prompt": "Summarize this document"},
+            ],
+            "models": [{"model": "gpt-5.5"}],
+        },
+        input_fn=lambda prompt: next(answers),
+        output_fn=output.append,
+    )
+
+    config, profiles = selected
+    assert profiles is None
+    assert config["prompt_name"] == "csv-review"
+    assert config["prompt"] == "Review this CSV"
+    assert any("csv-review" in line for line in output)
+    assert any("long-summary" in line for line in output)
+
+
+def test_main_selects_named_custom_prompt_non_interactively(
+    monkeypatch, tmp_path, capsys
+):
+    config = tmp_path / "benchmark.json"
+    config.write_text(
+        '{"prompts":[{"name":"csv-review","prompt":"Review this CSV"}],'
+        '"models":[{"model":"fake"}]}'
+    )
+    captured_config = {}
+    result = {"models": [{"summary": {"failed": 0}}]}
+
+    def fake_run(value, **kwargs):
+        captured_config.update(value)
+        return result
+
+    monkeypatch.setattr(cli, "run_benchmark", fake_run)
+    monkeypatch.setattr(cli, "save_result", lambda *args: tmp_path / "result.json")
+    monkeypatch.setattr(cli, "console_report", lambda *args, **kwargs: "rendered")
+    monkeypatch.setattr(
+        sys, "argv", ["llm-bench", str(config), "--prompt", "csv-review"]
+    )
+
+    cli.main()
+
+    assert captured_config["prompt_name"] == "csv-review"
+    assert captured_config["prompt"] == "Review this CSV"
+    assert capsys.readouterr().out.strip() == "rendered"
+
+
 def test_interactive_progress_describes_model_request_status_tokens_and_cost():
     assert (
         format_progress_event(

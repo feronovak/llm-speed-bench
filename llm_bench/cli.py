@@ -10,7 +10,13 @@ from typing import Any
 from .catalog import resolve_models
 from .env import load_env_file
 from .profiles import BUILTIN_PROFILES
-from .runner import console_report, load_config, run_benchmark, save_result
+from .runner import (
+    console_report,
+    load_config,
+    run_benchmark,
+    save_result,
+    select_custom_prompt,
+)
 
 
 def catalog_output(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -116,17 +122,30 @@ def interactive_selection(
     output_fn("Profiles:")
     for index, profile in enumerate(BUILTIN_PROFILES, 1):
         output_fn(f"  {index}. {profile['name']} — {profile['description']}")
+    custom_prompts = config.get("prompts", [])
+    if custom_prompts:
+        output_fn("Custom prompts:")
+        for prompt in custom_prompts:
+            output_fn(f"  {prompt['name']}")
     profile_answer = input_fn(
-        "Select profiles (numbers, all, or Enter for the config prompt): "
+        "Select profiles (numbers/all), a custom prompt name, "
+        "or Enter for the config prompt: "
     ).strip()
     if profile_answer.casefold() == "all":
         profile_selector = "all"
-    elif profile_answer:
+    elif profile_answer and all(
+        item.strip().isdigit() for item in profile_answer.split(",")
+    ):
         profile_selector = ",".join(
             BUILTIN_PROFILES[index]["name"]
             for index in _selected_numbers(profile_answer, len(BUILTIN_PROFILES))
         )
+    elif profile_answer:
+        config = select_custom_prompt(config, profile_answer)
+        profile_selector = None
     else:
+        if "prompt" not in config:
+            raise ValueError("select a custom prompt name or built-in profile")
         profile_selector = None
 
     default_repetitions = int(
@@ -147,7 +166,9 @@ def interactive_selection(
     selected_config["discovery"] = []
     selected_config["repetitions"] = repetitions
     selected_config["suite_repetitions"] = repetitions
-    profile_label = profile_selector or "config prompt"
+    profile_label = profile_selector or selected_config.get(
+        "prompt_name", "config prompt"
+    )
     output_fn(
         f"Ready: {len(selected_models)} models, {profile_label}, "
         f"{repetitions} repetitions."
@@ -173,6 +194,11 @@ def main() -> None:
         help="comma-separated built-in profiles, or 'all' for the mixed suite",
     )
     parser.add_argument(
+        "--prompt",
+        dest="prompt_name",
+        help="run one named custom prompt from the config",
+    )
+    parser.add_argument(
         "--interactive",
         action="store_true",
         help="interactively select models, profiles, and repetitions",
@@ -181,14 +207,19 @@ def main() -> None:
     try:
         load_env_file(args.config.resolve().parent / ".env.production")
         config = load_config(args.config)
-        if args.interactive and (args.catalog or args.profiles):
+        if args.profiles and args.prompt_name:
+            parser.error("--profiles cannot be combined with --prompt")
+        if args.interactive and (args.catalog or args.profiles or args.prompt_name):
             parser.error(
-                "--interactive cannot be combined with --catalog or --profiles"
+                "--interactive cannot be combined with --catalog, --profiles, "
+                "or --prompt"
             )
         if args.catalog:
             print(json.dumps(catalog_output(resolve_models(config)), indent=2))
             return
         profile_selector = args.profiles
+        if args.prompt_name:
+            config = select_custom_prompt(config, args.prompt_name)
         if args.interactive:
             selection = interactive_selection(config)
             if selection is None:
