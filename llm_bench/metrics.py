@@ -38,9 +38,12 @@ def _failure_hints(samples: list[dict[str, Any]]) -> list[str]:
             hints.append(hint)
 
     for sample in samples:
-        if sample["ok"]:
+        failed_output = not sample["ok"] or sample.get("valid_output") is False
+        if not failed_output:
             continue
-        error = str(sample.get("error") or "").casefold()
+        error = str(
+            sample.get("error") or sample.get("evaluation_error") or ""
+        ).casefold()
         preview = str(sample.get("response_preview") or "").strip()
         preview_folded = preview.casefold()
         output_tokens = sample.get("output_tokens")
@@ -62,7 +65,7 @@ def _failure_hints(samples: list[dict[str, Any]]) -> list[str]:
             output_tokens == 0
             and sample.get("input_tokens")
             and not preview
-            and not error
+            and (not sample.get("error"))
         ):
             add("provider returned no visible content after a billable request")
     return hints

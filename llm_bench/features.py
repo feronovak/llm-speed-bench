@@ -254,8 +254,19 @@ def replay_config(result: dict[str, Any]) -> dict[str, Any]:
     if "source_config" not in result:
         raise ValueError("result does not include source_config; cannot replay exactly")
     config = copy.deepcopy(result["source_config"])
+    replay_model_keys = (
+        "provider",
+        "model",
+        "name",
+        "base_url",
+        "api_key_env",
+        "api_version",
+        "max_tokens_parameter",
+        "capabilities",
+        "supports_temperature",
+    )
     config["models"] = [
-        {key: model[key] for key in ("provider", "model", "name") if key in model}
+        {key: model[key] for key in replay_model_keys if key in model}
         for model in result["models"]
     ]
     config["discovery"] = []

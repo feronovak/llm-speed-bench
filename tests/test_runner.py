@@ -713,6 +713,126 @@ def test_failed_validation_keeps_response_preview_without_full_response(monkeypa
     assert "response" not in sample
 
 
+def test_failed_profile_validation_keeps_response_preview(monkeypatch):
+    class FakeClient:
+        model = {"base_url": "https://example.test"}
+
+        def run(self, prompt, options):
+            response = "wrong"
+            return {
+                "ok": True,
+                "latency_seconds": 1,
+                "ttft_seconds": 0.1,
+                "output_tokens_per_second": 2,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "response_chars": len(response),
+                "response": response,
+                "error": None,
+            }
+
+    monkeypatch.setattr(
+        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+    )
+
+    result = run_benchmark(
+        {
+            "models": [{"provider": "openai", "model": "fake"}],
+            "warmups": 0,
+            "suite_repetitions": 1,
+        },
+        profile_selector="classification",
+    )
+
+    sample = result["models"][0]["profiles"][0]["samples"][0]
+    assert sample["ok"] is True
+    assert sample["valid_output"] is False
+    assert sample["response_preview"] == "wrong"
+    assert "response" not in sample
+
+
+def test_validation_failure_summary_hints_use_real_pipeline_samples(monkeypatch):
+    class FakeClient:
+        model = {"base_url": "https://example.test"}
+
+        def run(self, prompt, options):
+            response = "```json\n{}\n```"
+            return {
+                "ok": True,
+                "latency_seconds": 1,
+                "ttft_seconds": 0.1,
+                "output_tokens_per_second": 2,
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "response_chars": len(response),
+                "response": response,
+                "error": None,
+            }
+
+    monkeypatch.setattr(
+        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+    )
+
+    result = run_benchmark(
+        {
+            "prompt": "Return JSON",
+            "models": [{"provider": "openai", "model": "fake"}],
+            "warmups": 0,
+            "repetitions": 1,
+            "validation": {"json_schema": {"required": ["questions"]}},
+        }
+    )
+
+    assert result["models"][0]["summary"]["failure_hints"] == [
+        "response appears to be fenced Markdown instead of raw output"
+    ]
+
+
+def test_profile_validation_failure_summary_hints_use_real_pipeline_samples(
+    monkeypatch,
+):
+    class FakeClient:
+        model = {"base_url": "https://example.test"}
+
+        def run(self, prompt, options):
+            response = "Note: I must output only JSON."
+            return {
+                "ok": True,
+                "latency_seconds": 1,
+                "ttft_seconds": 0.1,
+                "output_tokens_per_second": 2,
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "response_chars": len(response),
+                "response": response,
+                "error": None,
+            }
+
+    monkeypatch.setattr(
+        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+    )
+
+    result = run_benchmark(
+        {
+            "models": [{"provider": "openai", "model": "fake"}],
+            "warmups": 0,
+            "suite_repetitions": 1,
+            "prompts": [
+                {
+                    "name": "source-to-quiz",
+                    "prompt": "Make quiz",
+                    "validation": {"regex": '"questions"\\s*:\\s*\\['},
+                }
+            ],
+        },
+        profile_selector="source-to-quiz",
+    )
+
+    assert result["models"][0]["profiles"][0]["summary"]["failure_hints"] == [
+        "reasoning or commentary appeared before the expected answer"
+    ]
+
+
 def test_report_ends_with_executive_summary_categories():
     def summary(latency, cost, success=1):
         return {
@@ -748,7 +868,8 @@ def test_report_ends_with_executive_summary_categories():
     assert "- Best value: **balanced**" in rendered
     assert "- Total spent: **$0.004500** including warmups." in rendered
     assert rendered.rstrip().endswith(
-        "Value equally weights valid-output reliability, relative speed, and relative cost."
+        "Value equally weights valid-output reliability, relative speed, and relative cost "
+        "among models with at least 80% reliability."
     )
 
 
@@ -789,6 +910,39 @@ def test_zero_reliability_model_cannot_rank_as_cheapest():
     }
     rendered = report(result)
     assert "- Cheapest: **working** — $0.001000 total." in rendered
+
+
+def test_low_reliability_model_cannot_rank_as_best_value():
+    def summary(latency, cost, reliability):
+        return {
+            "requests": 3,
+            "successful": 3,
+            "failed": 0,
+            "success_rate": 1,
+            "valid_output_rate": reliability,
+            "latency_seconds": {"mean": latency, "p50": latency, "p95": latency},
+            "ttft_seconds": {"p50": latency},
+            "output_tokens_per_second": {"p50": 10},
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "estimated_cost_usd": cost,
+        }
+
+    result = {
+        "benchmark": "ranked",
+        "run_id": "abc",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "prompt_sha256": "1234567890abcdef",
+        "models": [
+            {"name": "reliable", "summary": summary(2, 0.01, 1)},
+            {"name": "cheap-weak", "summary": summary(1, 0.0001, 0.33)},
+        ],
+    }
+
+    rendered = report(result)
+
+    assert "- Best value: **reliable**" in rendered
+    assert "- Best value: **cheap-weak**" not in rendered
 
 
 def test_console_report_uses_aligned_terminal_table_and_optional_color():

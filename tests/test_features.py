@@ -86,6 +86,39 @@ def test_replay_config_uses_saved_source_config_and_exact_model_set():
     assert config["repetitions"] == 2
 
 
+def test_replay_config_preserves_model_endpoint_and_auth_metadata():
+    result = {
+        "source_config": {
+            "prompt": "hi",
+            "models": [{"provider": "openai_compatible", "model": "old"}],
+        },
+        "models": [
+            {
+                "provider": "openai_compatible",
+                "model": "old",
+                "name": "proxy-old",
+                "base_url": "https://proxy.example.test/v1",
+                "api_key_env": "PROXY_API_KEY",
+                "api_version": "2026-01-01",
+            }
+        ],
+        "settings": {"repetitions": 1, "warmups": 0},
+    }
+
+    config = replay_config(result)
+
+    assert config["models"] == [
+        {
+            "provider": "openai_compatible",
+            "model": "old",
+            "name": "proxy-old",
+            "base_url": "https://proxy.example.test/v1",
+            "api_key_env": "PROXY_API_KEY",
+            "api_version": "2026-01-01",
+        }
+    ]
+
+
 def test_budget_check_rejects_excess_requests_and_cost():
     config = {
         "prompt": "hi",

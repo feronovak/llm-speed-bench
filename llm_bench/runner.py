@@ -19,6 +19,8 @@ from .presets import expand_presets
 from .profiles import evaluate_response, select_profiles
 from .redaction import redact_secrets
 
+MIN_BEST_VALUE_RELIABILITY = 0.8
+
 
 def _should_keep_response(config: dict[str, Any], sample: dict[str, Any]) -> bool:
     setting = config.get("save_responses", False)
@@ -268,6 +270,7 @@ def _execute(
                     "evaluation_error": evaluation["error"],
                 }
             )
+            _add_response_preview(sample)
             if level is not None:
                 sample["concurrency"] = level
             failed_output = not sample["ok"] or not sample.get("valid_output", True)
@@ -677,7 +680,9 @@ def _ranking_metrics(model: dict[str, Any]) -> dict[str, Any]:
         return {
             "name": model.get("name", model.get("model", "unknown")),
             "requests": summary.get("requests", 0),
-            "reliability": summary.get("success_rate", 0),
+            "reliability": summary.get(
+                "valid_output_rate", summary.get("success_rate", 0)
+            ),
             "latency": summary.get("latency_seconds", {}).get("mean"),
             "cost": summary.get("estimated_cost_usd"),
         }
@@ -734,7 +739,8 @@ def _executive_summary(result: dict[str, Any]) -> list[str]:
     value_candidates = [
         item
         for item in priced
-        if item["latency"] is not None and item["reliability"] > 0
+        if item["latency"] is not None
+        and item["reliability"] >= MIN_BEST_VALUE_RELIABILITY
     ]
     if value_candidates:
         min_latency = min(item["latency"] for item in value_candidates)
@@ -749,7 +755,10 @@ def _executive_summary(result: dict[str, Any]) -> list[str]:
             f"{best['value_score']:.0%} composite score."
         )
     else:
-        lines.append("- Best value: unavailable; latency and pricing are required.")
+        lines.append(
+            "- Best value: unavailable; latency, pricing, and at least "
+            f"{MIN_BEST_VALUE_RELIABILITY:.0%} reliability are required."
+        )
     total_cost = result.get("total_estimated_cost_usd")
     lines.append(
         "- Total spent: "
@@ -762,7 +771,8 @@ def _executive_summary(result: dict[str, Any]) -> list[str]:
     lines.extend(
         [
             "",
-            "Value equally weights valid-output reliability, relative speed, and relative cost.",
+            "Value equally weights valid-output reliability, relative speed, and relative cost "
+            f"among models with at least {MIN_BEST_VALUE_RELIABILITY:.0%} reliability.",
         ]
     )
     return lines
