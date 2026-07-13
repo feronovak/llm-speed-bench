@@ -650,6 +650,9 @@ def main() -> None:
         result = redact_secrets(result)
         if not args.no_save:
             path = save_result(result, args.output_dir)
+    except KeyboardInterrupt:
+        print("Benchmark cancelled; no artifacts saved.", file=sys.stderr)
+        raise SystemExit(130) from None
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(str(redact_secrets(str(exc))))
     print(

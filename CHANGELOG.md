@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 1.0.1 - Unreleased
+
+### Fixed
+
+- Handle Ctrl-C cleanly with exit code `130` and without writing artifacts.
+
 ## 1.0.0 - 2026-07-13
 
 ### Added

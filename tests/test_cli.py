@@ -903,6 +903,28 @@ def test_main_no_save_skips_artifact_writes(monkeypatch, tmp_path, capsys):
     assert "Saved raw result" not in captured.err
 
 
+def test_main_interrupt_exits_cleanly_without_saving(monkeypatch, tmp_path, capsys):
+    config = tmp_path / "benchmark.json"
+    config.write_text('{"prompt":"hello","models":[{"model":"fake"}]}')
+
+    def interrupt(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "run_benchmark", interrupt)
+    monkeypatch.setattr(
+        cli,
+        "save_result",
+        lambda *args: (_ for _ in ()).throw(AssertionError("must not save")),
+    )
+    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config)])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 130
+    assert "Benchmark cancelled; no artifacts saved." in capsys.readouterr().err
+
+
 def test_cli_process_exit_codes_stop_modes_and_budget_enforcement(tmp_path):
     def run(config: dict, *args: str) -> subprocess.CompletedProcess[str]:
         config_path = tmp_path / f"{len(list(tmp_path.iterdir()))}.json"

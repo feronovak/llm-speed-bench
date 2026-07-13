@@ -30,6 +30,8 @@ python3 -m llm_bench.cli \
 The mock provider returns a deterministic response so you can inspect the
 terminal report and exit behavior locally. Replace `mock:local` with a provider
 and model ID when you are ready to run paid requests.
+Press Ctrl-C to cancel a benchmark cleanly; the command exits with status `130`
+and does not save artifacts.
 
 ## What it measures
 
