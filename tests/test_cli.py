@@ -366,6 +366,12 @@ def test_interactive_selection_explains_all_tests_request_breakdown(monkeypatch)
     assert any("chat-fast: 3" in line for line in output)
     assert any("load: 16" in line and "c1=1, c5=5, c10=10" in line for line in output)
     assert any("28 nominal requests, up to 56 with retries" in line for line in output)
+    breakdown_index = output.index("Request breakdown per model:")
+    load_index = next(
+        index for index, line in enumerate(output) if line.startswith("  load:")
+    )
+    assert output[breakdown_index - 1] == ""
+    assert output[load_index + 1] == ""
 
 
 def test_interactive_selection_shows_colored_run_plan_and_status_meaning(monkeypatch):

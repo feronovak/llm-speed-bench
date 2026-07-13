@@ -490,12 +490,14 @@ def interactive_selection(
         f"{selected_config['save_responses']}"
     )
     if profile_selector:
+        output_fn("")
         output_fn("Request breakdown per model:")
         for breakdown_item in _test_breakdown(selected_config, profile_selector):
             output_fn(
                 f"  {breakdown_item['name']}: "
                 f"{breakdown_item['requests_per_model']} ({breakdown_item['details']})"
             )
+        output_fn("")
     if confirmation_answer is None:
         confirmation_answer = input_fn("Run paid benchmark? [y/N]: ").strip().casefold()
     if confirmation_answer not in {"y", "yes"}:
