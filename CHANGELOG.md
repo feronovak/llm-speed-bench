@@ -2,7 +2,16 @@
 
 All notable changes to this project are documented here.
 
-## 1.0.2 - Unreleased
+## 1.0.3 - 2026-07-13
+
+### Changed
+
+- Keep internal agent, roadmap, launch, and release-runbook material out of
+  public source distributions.
+- Restrict source artifacts to runtime code, package metadata, user-facing
+  documentation, and example configuration files.
+
+## 1.0.2 - 2026-07-13
 
 ### Added
 

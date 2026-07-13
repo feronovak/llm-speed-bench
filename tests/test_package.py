@@ -4,7 +4,7 @@ from llm_bench import __version__
 
 
 def test_package_version_is_stable_release():
-    assert __version__ == "1.0.2"
+    assert __version__ == "1.0.3"
 
 
 def test_release_targets_only_current_version_artifacts():
@@ -17,6 +17,32 @@ def test_release_targets_only_current_version_artifacts():
     assert "DIST_FILES := dist/llm_speed_bench-$(VERSION)*" in makefile
     assert "python3 -m twine check $(DIST_FILES)" in makefile
     assert "python3 -m twine upload --repository testpypi $(DIST_FILES)" in makefile
+
+
+def test_source_distribution_manifest_excludes_internal_repository_material():
+    manifest = Path("MANIFEST.in").read_text()
+
+    for exclusion in (
+        "exclude AGENTS.md",
+        "exclude CONTRIBUTING.md",
+        "exclude LAUNCH.md",
+        "exclude Makefile",
+        "exclude RELEASING.md",
+        "exclude SECURITY.md",
+        "prune .github",
+        "prune tests",
+    ):
+        assert exclusion in manifest
+
+    for internal_path in (
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "LAUNCH.md",
+        "Makefile",
+        "RELEASING.md",
+        "SECURITY.md",
+    ):
+        assert f"include {internal_path}" not in manifest
 
 
 def test_pypi_trusted_publisher_isolated_to_release_workflow():

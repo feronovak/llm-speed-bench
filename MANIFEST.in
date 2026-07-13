@@ -1,14 +1,15 @@
 include .env.example
-include AGENTS.md
 include CHANGELOG.md
-include CONTRIBUTING.md
-include LAUNCH.md
 include LICENSE
-include Makefile
 include README.md
-include RELEASING.md
-include SECURITY.md
 include benchmark.auto.example.json
 include benchmark.example.json
-recursive-include .github *.yml
-recursive-include tests *.py
+
+exclude AGENTS.md
+exclude CONTRIBUTING.md
+exclude LAUNCH.md
+exclude Makefile
+exclude RELEASING.md
+exclude SECURITY.md
+prune .github
+prune tests

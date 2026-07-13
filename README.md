@@ -124,8 +124,6 @@ equally weights reliability, relative speed, and relative measured cost among
 qualified models. New result files also record warmup usage and total estimated
 spend for the complete run.
 
-See [ROADMAP.md](ROADMAP.md) for the product roadmap and OSS promotion plan.
-
 ## Automatic model discovery
 
 Use `discovery` to resolve models from provider catalogs at run time. Every
@@ -571,8 +569,7 @@ make test
 make coverage
 ```
 
-See `AGENTS.md` for the durable development contract. Live provider credentials
-are not needed by the deterministic unit tests.
+Live provider credentials are not needed by the deterministic unit tests.
 
 ## Providers and configuration
 
@@ -710,10 +707,8 @@ on stale public registry entries.
 
 ## Release validation
 
-Install release tooling with `python3 -m pip install -e ".[release]"`, then
-run `make package` and `make check-dist`. Validate the exact artifacts on
-TestPyPI before publishing publicly; the full procedure is in
-[RELEASING.md](RELEASING.md).
+Each release is validated with tests, security checks, package metadata checks,
+and a fresh TestPyPI installation before public publication.
 
 ## Project structure
 

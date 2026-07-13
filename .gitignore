@@ -19,6 +19,12 @@ benchmark.json
 results/
 *.log
 
+# Private maintainer and agent material
+AGENTS.md
+LAUNCH.md
+RELEASING.md
+ROADMAP.md
+
 # Editors and operating systems
 .DS_Store
 .idea/
