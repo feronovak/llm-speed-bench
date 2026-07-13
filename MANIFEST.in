@@ -11,5 +11,6 @@ exclude LAUNCH.md
 exclude Makefile
 exclude RELEASING.md
 exclude SECURITY.md
+prune docs
 prune .github
 prune tests

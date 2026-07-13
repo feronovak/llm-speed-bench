@@ -29,6 +29,7 @@ def test_source_distribution_manifest_excludes_internal_repository_material():
         "exclude Makefile",
         "exclude RELEASING.md",
         "exclude SECURITY.md",
+        "prune docs",
         "prune .github",
         "prune tests",
     ):
@@ -41,6 +42,7 @@ def test_source_distribution_manifest_excludes_internal_repository_material():
         "Makefile",
         "RELEASING.md",
         "SECURITY.md",
+        "docs",
     ):
         assert f"include {internal_path}" not in manifest
 
