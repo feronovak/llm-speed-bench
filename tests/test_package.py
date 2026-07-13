@@ -4,7 +4,7 @@ from llm_bench import __version__
 
 
 def test_package_version_is_stable_release():
-    assert __version__ == "1.0.1"
+    assert __version__ == "1.0.2"
 
 
 def test_release_targets_only_current_version_artifacts():

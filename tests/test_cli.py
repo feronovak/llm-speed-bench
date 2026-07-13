@@ -111,7 +111,7 @@ def test_interactive_selection_separates_repetitions_section(monkeypatch):
         clear_fn=lambda: None,
     )
 
-    assert "Repetitions" in output
+    assert "=== Repetitions ===" in output
 
 
 def test_interactive_selection_lists_and_selects_named_custom_prompt(monkeypatch):
@@ -290,6 +290,35 @@ def test_help_lists_tests_before_profiles(monkeypatch, capsys):
     assert output.index("--tests") < output.index("--profiles")
 
 
+def test_main_init_creates_a_no_key_mock_benchmark(monkeypatch, tmp_path, capsys):
+    config_path = tmp_path / "first-benchmark.json"
+    monkeypatch.setattr(sys, "argv", ["llm-bench", "--init", str(config_path)])
+
+    cli.main()
+
+    config = json.loads(config_path.read_text())
+    assert config["name"] == "first-run"
+    assert config["models"] == [
+        {"name": "local-mock", "provider": "mock", "model": "local", "response": "ok"}
+    ]
+    assert config["validation"] == {"exact": "ok"}
+    assert config["warmups"] == 0
+    assert "Created" in capsys.readouterr().out
+
+
+def test_main_init_refuses_to_overwrite_a_config(monkeypatch, tmp_path, capsys):
+    config_path = tmp_path / "benchmark.json"
+    config_path.write_text('{"prompt":"keep this"}\n')
+    monkeypatch.setattr(sys, "argv", ["llm-bench", "--init", str(config_path)])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 2
+    assert config_path.read_text() == '{"prompt":"keep this"}\n'
+    assert "already exists" in capsys.readouterr().err
+
+
 def test_interactive_selection_shows_request_and_cost_estimate(monkeypatch):
     models = [
         {
@@ -353,7 +382,7 @@ def test_interactive_selection_shows_colored_run_plan_and_status_meaning(monkeyp
         clear_fn=lambda: None,
     )
 
-    assert any("\x1b[" in line and "Run plan" in line for line in output)
+    assert any("\x1b[" in line and "=== Run Plan ===" in line for line in output)
     assert any(
         "API OK means the provider returned a response" in line for line in output
     )
@@ -362,6 +391,30 @@ def test_interactive_selection_shows_colored_run_plan_and_status_meaning(monkeyp
         for line in output
     )
     assert any("Stop on:" in line and "any-fail" in line for line in output)
+
+
+def test_interactive_selection_visually_separates_each_stage(monkeypatch):
+    monkeypatch.setattr(
+        "llm_bench.cli.resolve_models",
+        lambda config: [{"provider": "mock", "model": "local"}],
+    )
+    output = []
+    answers = iter(["all", "", "", "n"])
+
+    interactive_selection(
+        {"prompt": "test", "models": [{"model": "local"}]},
+        input_fn=lambda prompt: next(answers),
+        output_fn=output.append,
+        clear_fn=lambda: None,
+    )
+
+    assert ["=== Models ===", "=== Tests ===", "=== Repetitions ==="] == [
+        line
+        for line in output
+        if line in {"=== Models ===", "=== Tests ===", "=== Repetitions ==="}
+    ]
+    assert "=== Stop Mode ===" in output
+    assert "=== Run Plan ===" in output
 
 
 def test_interactive_selection_accepts_stop_mode(monkeypatch):

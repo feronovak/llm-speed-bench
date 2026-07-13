@@ -18,18 +18,17 @@ who need to answer:
 
 ## 60-second local demo
 
-Run a complete benchmark without an API key, network request, or result file:
+Create and run a complete benchmark without an API key or network request:
 
 ```bash
-python3 -m llm_bench.cli \
-  --quick "Reply with ok." \
-  --models mock:local \
-  --no-save
+llm-bench --init
+llm-bench benchmark.json --no-save
 ```
 
-The mock provider returns a deterministic response so you can inspect the
-terminal report and exit behavior locally. Replace `mock:local` with a provider
-and model ID when you are ready to run paid requests.
+`--init` refuses to overwrite an existing file and creates a deterministic mock
+provider configuration. You can inspect the terminal report and exit behavior
+locally, then replace `mock:local` with a provider and model ID when you are
+ready to run paid requests.
 Press Ctrl-C to cancel a benchmark cleanly; the command exits with status `130`
 and does not save artifacts.
 

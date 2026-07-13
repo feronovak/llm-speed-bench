@@ -249,8 +249,40 @@ def _load_quick_env_file(args: argparse.Namespace) -> None:
     load_env_file(env_file)
 
 
+def _starter_config() -> dict[str, Any]:
+    return {
+        "name": "first-run",
+        "prompt": "Reply with ok.",
+        "validation": {"exact": "ok"},
+        "models": [
+            {
+                "name": "local-mock",
+                "provider": "mock",
+                "model": "local",
+                "response": "ok",
+            }
+        ],
+        "repetitions": 1,
+        "warmups": 0,
+        "save_responses": False,
+    }
+
+
+def _write_starter_config(path: Path) -> None:
+    try:
+        with path.open("x", encoding="utf-8") as handle:
+            json.dump(_starter_config(), handle, indent=2)
+            handle.write("\n")
+    except FileExistsError as exc:
+        raise ValueError(f"{path} already exists; refusing to overwrite it") from exc
+
+
 def _style(text: str, code: str, color: bool) -> str:
     return f"\x1b[{code}m{text}\x1b[0m" if color else text
+
+
+def _stage_heading(title: str, color_code: str, color: bool) -> str:
+    return _style(f"=== {title} ===", f"1;{color_code}", color)
 
 
 def _clear_screen() -> None:
@@ -270,7 +302,7 @@ def interactive_selection(
     if not models:
         raise ValueError("model discovery returned no models")
 
-    output_fn(_style("Models", "1;36", color))
+    output_fn(_stage_heading("Models", "36", color))
     for index, model in enumerate(models, 1):
         provider = model.get("provider", "openai_compatible")
         output_fn(
@@ -308,7 +340,7 @@ def interactive_selection(
         ]
 
     output_fn("")
-    output_fn(_style("Tests", "1;35", color))
+    output_fn(_stage_heading("Tests", "35", color))
     tests: list[tuple[str, str, str]] = []
     for profile in BUILTIN_PROFILES:
         tests.append(("profile", profile["name"], profile["description"]))
@@ -351,7 +383,7 @@ def interactive_selection(
         )
     )
     output_fn("")
-    output_fn(_style("Repetitions", "1;34", color))
+    output_fn(_stage_heading("Repetitions", "34", color))
     repetitions_answer = input_fn(
         f"Repetitions per test [{default_repetitions}]: "
     ).strip()
@@ -360,7 +392,7 @@ def interactive_selection(
         raise ValueError("repetitions must be positive")
 
     output_fn("")
-    output_fn(_style("Stop Mode", "1;31", color))
+    output_fn(_stage_heading("Stop Mode", "31", color))
     output_fn("  1. any-fail — stop after API error or TEST FAIL")
     output_fn("  2. api-error — stop only if the provider/request breaks")
     output_fn("  3. test-fail — stop on model output failure, ignore API-ok passes")
@@ -400,7 +432,7 @@ def interactive_selection(
         "prompt_name", "config prompt"
     )
     output_fn("")
-    output_fn(_style("Run plan", "1;36", color))
+    output_fn(_stage_heading("Run Plan", "36", color))
     output_fn(f"  {_style('Models:', '1;36', color)} {len(selected_models)} selected")
     output_fn(f"  {_style('Tests:', '1;35', color)} {profile_label}")
     output_fn(f"  {_style('Repetitions:', '1;34', color)} {repetitions}")
@@ -476,6 +508,13 @@ def main() -> None:
     )
     parser.add_argument("--quick", help="run an ad hoc prompt without a config file")
     parser.add_argument(
+        "--init",
+        nargs="?",
+        const=Path("benchmark.json"),
+        type=Path,
+        help="create a no-key mock benchmark configuration",
+    )
+    parser.add_argument(
         "--models", help="comma-separated provider:model list for --quick"
     )
     parser.add_argument("--diff", nargs=2, type=Path, metavar=("BASELINE", "CURRENT"))
@@ -539,6 +578,13 @@ def main() -> None:
     args = parser.parse_args()
     path: Path | None = None
     try:
+        if args.init is not None:
+            if args.config is not None:
+                parser.error("--init cannot be combined with a benchmark configuration")
+            _write_starter_config(args.init)
+            print(f"Created {args.init}")
+            print(f"Run the no-key demo: llm-bench {args.init} --no-save")
+            return
         if args.no_env_file and args.env_file:
             parser.error("--no-env-file cannot be combined with --env-file")
         if args.diff:

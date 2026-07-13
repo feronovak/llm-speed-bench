@@ -1002,14 +1002,21 @@ def console_report(result: dict[str, Any], color: bool = False) -> str:
             "\x1b[32m" if status == 1 else "\x1b[33m" if status > 0 else "\x1b[31m"
             for status in statuses
         ]
+
+    def section(title: str) -> str:
+        text = f"=== {title} ==="
+        return f"\x1b[1;36m{text}\x1b[0m" if color else text
+
     lines = [
         f"\x1b[1m{result['benchmark']}\x1b[0m" if color else result["benchmark"],
         f"Run {result['run_id']}  •  {result['timestamp']}",
         *([f"Prompt {result['prompt_name']}"] if result.get("prompt_name") else []),
         "",
+        section("RESULTS"),
         *_terminal_table(headers, rows, colors),
         "",
-        "\x1b[1;36mPass/fail dashboard\x1b[0m" if color else "Pass/fail dashboard",
+        section("QUALITY GATE"),
+        "Pass/fail dashboard",
         *_terminal_table(
             ["Model", "Result", "Failed tests"],
             _pass_fail_rows(result),
@@ -1021,7 +1028,8 @@ def console_report(result: dict[str, Any], color: bool = False) -> str:
             else None,
         ),
         "",
-        "\x1b[1;36mExecutive summary\x1b[0m" if color else "Executive summary",
+        section("DECISION"),
+        "Executive summary",
     ]
     for line in _executive_summary(result)[3:]:
         if not line:

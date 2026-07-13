@@ -2,7 +2,16 @@
 
 All notable changes to this project are documented here.
 
-## 1.0.1 - Unreleased
+## 1.0.2 - Unreleased
+
+### Added
+
+- Add `llm-bench --init` to create a safe, deterministic no-key mock benchmark
+  without overwriting an existing configuration.
+- Visually separate interactive setup stages and final terminal results,
+  quality-gate, and decision sections.
+
+## 1.0.1 - 2026-07-13
 
 ### Fixed
 
