@@ -6,7 +6,7 @@ Your shell is using an older installation. Reinstall the checkout:
 
 ```bash
 python3 -m pip install --user --upgrade --no-build-isolation .
-llm-bench catalog --help
+llm-preflight catalog --help
 ```
 
 ## Catalogue refresh says API keys are missing
@@ -34,7 +34,7 @@ enough metadata to choose a safe request shape automatically. It is not a
 failure. If you are considering that model, run:
 
 ```bash
-llm-bench catalog probe benchmarks/watch.json
+llm-preflight catalog probe benchmarks/watch.json
 ```
 
 Select it, review the confirmation, and allow one minimal request. If you are
@@ -54,7 +54,7 @@ or provider-native structured-output settings.
 Use the saved result:
 
 ```bash
-llm-bench models approve PROVIDER:MODEL --from RESULT.json --approved APPROVED.json
+llm-preflight models approve PROVIDER:MODEL --from RESULT.json --approved APPROVED.json
 ```
 
 ## I want to re-test approved models

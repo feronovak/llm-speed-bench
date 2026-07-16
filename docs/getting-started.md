@@ -1,6 +1,6 @@
 # Getting started
 
-LLM Speed Bench answers a practical question before you change production:
+LLM Preflight answers a practical question before you change production:
 
 > Can this candidate model replace our current model without breaking the
 > response contract, latency expectations, or budget?
@@ -15,8 +15,8 @@ This creates a deterministic mock benchmark. It needs no API key, network, or
 paid request:
 
 ```bash
-llm-bench --init
-llm-bench benchmark.json --no-save
+llm-preflight --init
+llm-preflight benchmark.json --no-save
 ```
 
 The terminal report separates provider failures from failed output validation.
@@ -39,9 +39,9 @@ the JSON file or commit the env file.
 Always inspect a live plan before you run it:
 
 ```bash
-llm-bench benchmark.json --doctor
-llm-bench benchmark.json --dry-run
-llm-bench benchmark.json --migration-check
+llm-preflight benchmark.json --doctor
+llm-preflight benchmark.json --dry-run
+llm-preflight benchmark.json --migration-check
 ```
 
 `--doctor` checks configuration and required credentials without generation.
@@ -59,7 +59,7 @@ ranking; run a repeated task-specific test after it passes.
 For an easier first paid run, use the guided terminal screen instead:
 
 ```bash
-llm-bench benchmark.json --interactive
+llm-preflight benchmark.json --interactive
 ```
 
 It asks what to test, previews the paid plan, and requires confirmation before

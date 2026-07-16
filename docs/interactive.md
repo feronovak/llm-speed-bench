@@ -5,14 +5,14 @@ to decide the models and tests at the terminal, then see the paid-work plan
 before anything is sent:
 
 ```bash
-llm-bench benchmark.json --interactive
+llm-preflight benchmark.json --interactive
 ```
 
 For the fastest non-interactive decision, run this first:
 
 ```bash
-llm-bench benchmark.json --migration-check --dry-run
-llm-bench benchmark.json --migration-check
+llm-preflight benchmark.json --migration-check --dry-run
+llm-preflight benchmark.json --migration-check
 ```
 
 It runs the three `quick-migration-check` response-contract cases once per
@@ -32,7 +32,7 @@ It has three stages:
 
 ![Cancelled mock interactive session](images/interactive-mock-session.svg)
 
-This capture uses the no-key mock config created by `llm-bench --init`. It was
+This capture uses the no-key mock config created by `llm-preflight --init`. It was
 cancelled at confirmation, so it made no network or paid request.
 
 ## How to answer the prompts
@@ -62,13 +62,13 @@ text candidate and records no response text. Run it before creating a candidate
 plan only when the catalogue labels a model **Needs one probe**:
 
 ```bash
-llm-bench catalog probe benchmarks/watch.json
+llm-preflight catalog probe benchmarks/watch.json
 ```
 
 The paid comparison remains one consistent flow:
 
 ```bash
-llm-bench benchmarks/candidates.json --interactive \
+llm-preflight benchmarks/candidates.json --interactive \
   --approve-to benchmarks/approved.json
 ```
 

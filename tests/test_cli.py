@@ -390,7 +390,7 @@ def test_main_init_creates_a_no_key_mock_benchmark(monkeypatch, tmp_path, capsys
     assert config["warmups"] == 0
     output = capsys.readouterr().out
     assert "Created" in output
-    assert f"Explore interactively: llm-bench {config_path} --interactive" in output
+    assert f"Explore interactively: llm-preflight {config_path} --interactive" in output
 
 
 def test_main_init_prints_module_commands_when_run_with_python_module(

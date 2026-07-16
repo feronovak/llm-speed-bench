@@ -358,7 +358,7 @@ def _write_starter_config(path: Path) -> None:
 def _display_command() -> str:
     if Path(sys.argv[0]).name == "cli.py":
         return "python3 -m llm_bench.cli"
-    return "llm-bench"
+    return "llm-preflight"
 
 
 def _format_catalog_watch(payload: dict[str, Any]) -> str:

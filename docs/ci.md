@@ -8,7 +8,7 @@ selected model completes and passes validation; an API error or failed test
 exits 1. Cancellation exits 130.
 
 ```bash
-llm-bench benchmark.json --json --no-save > current.json
+llm-preflight benchmark.json --json --no-save > current.json
 ```
 
 Use `--dry-run --json` to inspect the exact paid-work plan in CI without making
@@ -27,8 +27,8 @@ Keep a reviewed baseline result, write the current run to a file, then compare
 them in a separate command:
 
 ```bash
-llm-bench benchmark.json --json --no-save > current.json
-llm-bench --diff baseline.json current.json --json --ci > comparison.json
+llm-preflight benchmark.json --json --no-save > current.json
+llm-preflight --diff baseline.json current.json --json --ci > comparison.json
 ```
 
 The second command exits 1 when configured baseline thresholds regress and
@@ -53,10 +53,10 @@ For the complete stable result structure, see [Result JSON schema](result-schema
 ## Safe CI starter
 
 ```bash
-llm-bench benchmark.json --doctor --json
-llm-bench benchmark.json --pricing-check
-llm-bench benchmark.json --smoke --dry-run --json
-llm-bench benchmark.json --smoke --json --no-save > current.json
+llm-preflight benchmark.json --doctor --json
+llm-preflight benchmark.json --pricing-check
+llm-preflight benchmark.json --smoke --dry-run --json
+llm-preflight benchmark.json --smoke --json --no-save > current.json
 ```
 
 Set `max_requests` and `max_estimated_cost_usd` in the config to prevent

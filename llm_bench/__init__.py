@@ -1,3 +1,3 @@
-"""Repeatable LLM latency and throughput benchmarks."""
+"""Local, cross-provider preflight checks for an LLM model switch."""
 
-__version__ = "1.2.2"
+__version__ = "2.0.0"

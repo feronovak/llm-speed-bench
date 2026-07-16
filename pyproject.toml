@@ -3,14 +3,14 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm-speed-bench"
-version = "1.2.2"
-description = "Local smoke tests for live LLM models, latency, and cost"
+name = "llm-preflight"
+version = "2.0.0"
+description = "Local, cross-provider preflight checks for an LLM model switch"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-keywords = ["llm", "benchmark", "latency", "openai", "anthropic", "gemini"]
+keywords = ["llm", "preflight", "model-switch", "validation", "openai", "anthropic", "gemini"]
 dependencies = []
 
 classifiers = [
@@ -31,6 +31,7 @@ audit = ["bandit>=1.9", "detect-secrets>=1.5", "mypy>=1.19"]
 release = ["build>=1.2", "twine>=6"]
 
 [project.scripts]
+llm-preflight = "llm_bench.cli:main"
 llm-bench = "llm_bench.cli:main"
 
 [tool.setuptools.packages.find]

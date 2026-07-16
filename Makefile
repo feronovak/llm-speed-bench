@@ -1,5 +1,5 @@
 VERSION := $(shell python3 -c "from llm_bench import __version__; print(__version__)")
-DIST_FILES := dist/llm_speed_bench-$(VERSION)*
+DIST_FILES := dist/llm_preflight-$(VERSION)*
 
 .PHONY: audit check-dist coverage package publish-test test test-one
 

@@ -75,8 +75,8 @@ Custom prompts are named, reusable tests:
 ```
 
 ```bash
-llm-bench benchmark.json --prompt csv-review
-llm-bench benchmark.json --tests exact-routing-check,csv-review
+llm-preflight benchmark.json --prompt csv-review
+llm-preflight benchmark.json --tests exact-routing-check,csv-review
 ```
 
 For long content, use `prompt_file` relative to the config file. It must remain
@@ -103,7 +103,7 @@ values always win over preset defaults.
 }
 ```
 
-Run an overlay with `llm-bench benchmark.json --env ci`. See
+Run an overlay with `llm-preflight benchmark.json --env ci`. See
 [tests, pricing, and safety](tests-pricing-safety.md) for validation choices and
 data handling. See the [complete configuration reference](config-reference.md)
 for every supported key and default.

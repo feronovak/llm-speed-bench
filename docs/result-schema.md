@@ -1,6 +1,6 @@
 # Result JSON schema
 
-`llm-bench CONFIG --json` writes one result object to standard output. Saved
+`llm-preflight CONFIG --json` writes one result object to standard output. Saved
 `results/*.json` files use the same schema. The current `schema_version` is
 `1`; integrations should reject an unknown major schema version rather than
 guessing its meaning.
@@ -59,7 +59,7 @@ unknown rather than zero.
 
 ## Baseline comparison JSON
 
-`llm-bench --diff BASELINE CURRENT --json --ci` writes a separate comparison
+`llm-preflight --diff BASELINE CURRENT --json --ci` writes a separate comparison
 object: `ok` plus `models[]`. A compared row exposes
 `latency_p95_delta_seconds`, `success_rate_delta`, `valid_output_rate_delta`,
 `cost_delta_usd`, and `regressions`. An added model has `status: "added"` and

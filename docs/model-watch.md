@@ -17,7 +17,7 @@ where a provider may charge for a request.
 Run this once in an empty project directory:
 
 ```bash
-llm-bench catalog init
+llm-preflight catalog init
 ```
 
 Press Enter to include all supported providers. The command creates:
@@ -40,7 +40,7 @@ than copying keys. `catalog init` asks before changing an existing workspace.
 ### 1. Refresh the provider catalogues
 
 ```bash
-llm-bench catalog refresh benchmarks/watch.json
+llm-preflight catalog refresh benchmarks/watch.json
 ```
 
 This makes metadata requests only. It tells you what changed since the last
@@ -63,7 +63,7 @@ failed chat model.
 If refresh reports **Needs one probe**, review those models first:
 
 ```bash
-llm-bench catalog probe benchmarks/watch.json
+llm-preflight catalog probe benchmarks/watch.json
 ```
 
 Select one or a few model numbers, then confirm. The probe sends one minimal
@@ -81,7 +81,7 @@ model available to one user and unavailable to another.
 ### 3. Make a temporary candidate plan
 
 ```bash
-llm-bench catalog prepare benchmarks/watch.json \
+llm-preflight catalog prepare benchmarks/watch.json \
   --against benchmarks/approved.json \
   --output benchmarks/candidates.json
 ```
@@ -94,7 +94,7 @@ It does not change your approved list.
 If you intentionally want a fresh temporary plan, make replacement explicit:
 
 ```bash
-llm-bench catalog prepare benchmarks/watch.json \
+llm-preflight catalog prepare benchmarks/watch.json \
   --against benchmarks/approved.json \
   --output benchmarks/candidates.json --replace
 ```
@@ -106,8 +106,8 @@ comparison: can each model respond through your account, meet a basic response
 contract, and respond quickly enough from this host?
 
 ```bash
-llm-bench benchmarks/candidates.json --migration-check --dry-run
-llm-bench benchmarks/candidates.json --migration-check \
+llm-preflight benchmarks/candidates.json --migration-check --dry-run
+llm-preflight benchmarks/candidates.json --migration-check \
   --output-dir benchmarks/results
 ```
 
@@ -115,7 +115,7 @@ Then use interactive mode for the task-specific contract that matters to your
 application—for example structured output or exact routing:
 
 ```bash
-llm-bench benchmarks/candidates.json --interactive \
+llm-preflight benchmarks/candidates.json --interactive \
   --approve-to benchmarks/approved.json \
   --output-dir benchmarks/results
 ```
@@ -135,7 +135,7 @@ result history, not in your permanent set.
 To promote a passing model later, use its saved result:
 
 ```bash
-llm-bench models approve openai:MODEL_ID \
+llm-preflight models approve openai:MODEL_ID \
   --from benchmarks/results/RUN.json \
   --approved benchmarks/approved.json \
   --note "Passed our candidate review."
@@ -160,10 +160,10 @@ Existing approvals do not change during discovery. If a selected model returns
 test plan from it, then run that plan:
 
 ```bash
-llm-bench catalog test benchmarks/watch.json \
+llm-preflight catalog test benchmarks/watch.json \
   --approved benchmarks/approved.json \
   --output benchmarks/approved-tests.json
-llm-bench benchmarks/approved-tests.json --interactive \
+llm-preflight benchmarks/approved-tests.json --interactive \
   --output-dir benchmarks/results
 ```
 
@@ -174,7 +174,7 @@ check only.
 ### Remove a model you no longer want
 
 ```bash
-llm-bench models remove PROVIDER:MODEL_ID \
+llm-preflight models remove PROVIDER:MODEL_ID \
   --approved benchmarks/approved.json \
   --note "Retired by provider."
 ```
@@ -186,8 +186,8 @@ The command confirms the change and preserves old result files as history.
 Before any paid run, inspect it without sending requests:
 
 ```bash
-llm-bench benchmarks/candidates.json --dry-run
-llm-bench benchmarks/candidates.json --pricing-check
+llm-preflight benchmarks/candidates.json --dry-run
+llm-preflight benchmarks/candidates.json --pricing-check
 ```
 
 Unknown pricing is shown as `n/a`, not free. Keep `max_requests` and, where

@@ -1,12 +1,16 @@
-# LLM Speed Bench
+# LLM Preflight
 
-Know whether a model change is safe before it reaches production. LLM Speed
-Bench runs a small local preflight across providers and compares validated
+Know whether a model change is safe before it reaches production. LLM Preflight
+runs a small local preflight across providers and compares validated
 output, response speed, tokens, and estimated cost.
 
 It is a local preflight tool—not a hosted evaluation platform, tracing system,
 RAG framework, or public leaderboard. Its results are evidence for your
 account, network, prompts, and validation rules.
+
+Formerly **LLM Speed Bench**. The primary command is `llm-preflight`;
+`llm-bench` remains a supported compatibility command. See the
+[migration guide](docs/migrating-to-llm-preflight.md).
 
 > [!WARNING]
 > Live benchmarks make paid API requests. Start with the no-key demo, preview
@@ -17,8 +21,8 @@ account, network, prompts, and validation rules.
 Create and run a deterministic local benchmark—no API key or network request:
 
 ```bash
-llm-bench --init
-llm-bench benchmark.json --no-save
+llm-preflight --init
+llm-preflight benchmark.json --no-save
 ```
 
 From a source checkout:
@@ -63,8 +67,8 @@ write JSON and Markdown results under `results/`.
 Install the command globally in a virtual environment if preferred:
 
 ```bash
-python3 -m pip install llm-speed-bench
-llm-bench --init
+python3 -m pip install llm-preflight
+llm-preflight --init
 ```
 
 Run `--doctor` and `--dry-run` before the final command. They make no generation
@@ -76,8 +80,8 @@ This is the core workflow. Put your approved model and candidate model in one
 config, then run the small response-and-contract preflight:
 
 ```bash
-llm-bench benchmark.json --migration-check --dry-run
-llm-bench benchmark.json --migration-check
+llm-preflight benchmark.json --migration-check --dry-run
+llm-preflight benchmark.json --migration-check
 ```
 
 It sends three short representative cases to each selected model, once each.
@@ -107,13 +111,13 @@ lifecycle below. It keeps broad provider metadata separate from the small set
 of models you approve for ongoing testing.
 
 ```bash
-llm-bench catalog init
-llm-bench catalog refresh benchmarks/watch.json
+llm-preflight catalog init
+llm-preflight catalog refresh benchmarks/watch.json
 # If a model is shown as “Needs one probe”, review and confirm a minimal request:
-llm-bench catalog probe benchmarks/watch.json
-llm-bench catalog prepare benchmarks/watch.json \
+llm-preflight catalog probe benchmarks/watch.json
+llm-preflight catalog prepare benchmarks/watch.json \
   --against benchmarks/approved.json --output benchmarks/candidates.json
-llm-bench benchmarks/candidates.json --interactive \
+llm-preflight benchmarks/candidates.json --interactive \
   --approve-to benchmarks/approved.json
 ```
 
@@ -130,15 +134,15 @@ regression should fail the pipeline.
 
 ```bash
 # Inspect configuration, credentials, and model selection without generation.
-llm-bench benchmark.json --doctor
-llm-bench benchmark.json --dry-run
-llm-bench benchmark.json --pricing-check
+llm-preflight benchmark.json --doctor
+llm-preflight benchmark.json --dry-run
+llm-preflight benchmark.json --pricing-check
 
 # Run a reduced live benchmark.
-llm-bench benchmark.json --smoke
+llm-preflight benchmark.json --smoke
 
 # Run a single ad hoc prompt.
-llm-bench --quick "Return only valid JSON with a status field." \
+llm-preflight --quick "Return only valid JSON with a status field." \
   --models openai:gpt-5.4-mini
 ```
 

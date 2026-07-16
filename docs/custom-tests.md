@@ -32,7 +32,7 @@ Put one or more of these objects in the top-level `prompts` list of your
 benchmark config. Run one by name:
 
 ```bash
-llm-bench benchmark.json --tests ticket-extraction
+llm-preflight benchmark.json --tests ticket-extraction
 ```
 
 To compare a current model and a candidate, put both models in `models`. The
@@ -45,9 +45,9 @@ These examples use the local `mock` provider, so they need no API key and cost
 nothing. Run one to see the result shape:
 
 ```bash
-llm-bench examples/custom-contracts/ticket-extraction.json --no-save
-llm-bench examples/custom-contracts/intent-routing.json --no-save
-llm-bench examples/custom-contracts/content-rule.json --no-save
+llm-preflight examples/custom-contracts/ticket-extraction.json --no-save
+llm-preflight examples/custom-contracts/intent-routing.json --no-save
+llm-preflight examples/custom-contracts/content-rule.json --no-save
 ```
 
 Then copy an example to your project, replace `local-example` with your current
@@ -104,16 +104,16 @@ JSON. This is a complete prompt object:
 Run a cheap first comparison:
 
 ```bash
-llm-bench benchmark.json --tests ticket-contract --smoke --dry-run
-llm-bench benchmark.json --tests ticket-contract --smoke
+llm-preflight benchmark.json --tests ticket-contract --smoke --dry-run
+llm-preflight benchmark.json --tests ticket-contract --smoke
 ```
 
 When the candidate passes, repeat the contract from the same host before making
 a cost or latency decision:
 
 ```bash
-llm-bench benchmark.json --tests ticket-contract --dry-run
-llm-bench benchmark.json --tests ticket-contract
+llm-preflight benchmark.json --tests ticket-contract --dry-run
+llm-preflight benchmark.json --tests ticket-contract
 ```
 
 ## Keep contracts useful

@@ -1,8 +1,11 @@
 # CLI reference
 
-Run `llm-bench --help` for the installed version. The options below match this
+Run `llm-preflight --help` for the installed version. The options below match this
 release. `config` is a benchmark JSON path and is required unless `--init`,
 `--quick`, `--diff`, or `--replay` is used.
+
+`llm-preflight` is the primary command. `llm-bench` remains a fully supported
+compatibility command; both invoke the same program and accept the same flags.
 
 | Option | Default | Purpose |
 |---|---:|---|
@@ -96,14 +99,14 @@ temporary candidate plan, benchmark execution, and permanent approval separate.
 Example:
 
 ```bash
-llm-bench catalog init
-llm-bench catalog refresh benchmarks/watch.json
+llm-preflight catalog init
+llm-preflight catalog refresh benchmarks/watch.json
 # Run only when a selected text model is labelled "Needs one probe".
-llm-bench catalog probe benchmarks/watch.json
-llm-bench catalog prepare benchmarks/watch.json \
+llm-preflight catalog probe benchmarks/watch.json
+llm-preflight catalog prepare benchmarks/watch.json \
   --against benchmarks/approved.json \
   --output benchmarks/candidates.json
-llm-bench benchmarks/candidates.json --interactive \
+llm-preflight benchmarks/candidates.json --interactive \
   --approve-to benchmarks/approved.json
 ```
 

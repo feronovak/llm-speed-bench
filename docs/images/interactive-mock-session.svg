@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
-  <title id="title">Cancelled LLM Speed Bench mock interactive session</title>
+  <title id="title">Cancelled LLM Preflight mock interactive session</title>
   <desc id="desc">Terminal output showing model selection, test selection, repetitions, stop mode, and a paid-run preview.</desc>
   <rect width="960" height="520" rx="12" fill="#0d1117"/>
   <rect x="0" y="0" width="960" height="34" rx="12" fill="#161b22"/>

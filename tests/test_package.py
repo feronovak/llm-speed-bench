@@ -3,11 +3,41 @@ import re
 from pathlib import Path
 
 from llm_bench import __version__
+from llm_bench import cli
 from llm_bench.runner import run_benchmark
 
 
 def test_package_version_is_stable_release():
-    assert __version__ == "1.2.2"
+    assert __version__ == "2.0.0"
+
+
+def test_preflight_is_the_primary_command_and_bench_remains_compatible(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["llm-preflight"])
+    assert cli._display_command() == "llm-preflight"
+
+    pyproject = Path("pyproject.toml").read_text()
+    assert 'name = "llm-preflight"' in pyproject
+    assert 'llm-preflight = "llm_bench.cli:main"' in pyproject
+    assert 'llm-bench = "llm_bench.cli:main"' in pyproject
+
+
+def test_legacy_pypi_distribution_is_a_dependency_only_compatibility_shim():
+    shim = Path("legacy-pypi-shim/pyproject.toml").read_text()
+
+    assert 'name = "llm-speed-bench"' in shim
+    assert "llm-preflight>=2.0.0,<3.0.0" in shim
+    assert 'llm-bench = "llm_bench.cli:main"' in shim
+    assert not (Path("legacy-pypi-shim") / "llm_bench").exists()
+
+
+def test_legacy_shim_can_only_be_published_by_explicit_manual_confirmation():
+    workflow = Path(".github/workflows/publish-legacy-shim.yml").read_text()
+
+    assert "workflow_dispatch:" in workflow
+    assert 'default: ""' in workflow
+    assert "inputs.confirm == 'PUBLISH-LEGACY-SHIM'" in workflow
+    assert "legacy-pypi-shim" in workflow
+    assert "pypa/gh-action-pypi-publish@release/v1" in workflow
 
 
 def test_build_backend_supports_editable_installs_without_an_unnecessary_floor():
@@ -20,9 +50,10 @@ def test_build_backend_supports_editable_installs_without_an_unnecessary_floor()
 def test_legacy_installer_has_explicit_package_metadata_fallback():
     setup = Path("setup.py").read_text()
 
-    assert 'name="llm-speed-bench"' in setup
-    assert 'version="1.2.2"' in setup
-    assert 'entry_points={"console_scripts": ["llm-bench=llm_bench.cli:main"]}' in setup
+    assert 'name="llm-preflight"' in setup
+    assert 'version="2.0.0"' in setup
+    assert '"llm-preflight=llm_bench.cli:main"' in setup
+    assert '"llm-bench=llm_bench.cli:main"' in setup
 
 
 def test_example_does_not_present_unknown_model_pricing_as_free():
@@ -118,7 +149,7 @@ def test_release_targets_only_current_version_artifacts():
         'VERSION := $(shell python3 -c "from llm_bench import __version__; print(__version__)")'
         in makefile
     )
-    assert "DIST_FILES := dist/llm_speed_bench-$(VERSION)*" in makefile
+    assert "DIST_FILES := dist/llm_preflight-$(VERSION)*" in makefile
     assert "python3 -m twine check $(DIST_FILES)" in makefile
     assert "python3 -m twine upload --repository testpypi $(DIST_FILES)" in makefile
 
@@ -147,6 +178,7 @@ def test_source_distribution_manifest_keeps_only_public_release_material():
 
     for excluded in ("exclude AGENTS.md", "exclude CONTRIBUTING.md", "prune docs"):
         assert excluded in manifest
+    assert "prune legacy-pypi-shim" in manifest
 
 
 def test_pypi_trusted_publisher_isolated_to_release_workflow():
@@ -168,9 +200,10 @@ def test_testpypi_workflow_uses_oidc_and_verifies_the_published_package():
     assert "name: testpypi" in workflow
     assert "id-token: write" in workflow
     assert "repository-url: https://test.pypi.org/legacy/" in workflow
-    assert "llm-speed-bench==${VERSION}" in workflow
+    assert "llm-preflight==${VERSION}" in workflow
     assert (
-        'llm-bench --quick "Reply with ok." --models mock:local --no-save' in workflow
+        'llm-preflight --quick "Reply with ok." --models mock:local --no-save'
+        in workflow
     )
     assert "TWINE_PASSWORD" not in workflow
     assert "PYPI_API_TOKEN" not in workflow

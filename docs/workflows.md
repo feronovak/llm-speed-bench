@@ -15,8 +15,8 @@ Put your current approved model and candidate model in the same configuration,
 then run the smallest meaningful preflight:
 
 ```bash
-llm-bench benchmark.json --migration-check --dry-run
-llm-bench benchmark.json --migration-check
+llm-preflight benchmark.json --migration-check --dry-run
+llm-preflight benchmark.json --migration-check
 ```
 
 This runs three short response cases once per model. It checks real account/API
@@ -27,8 +27,8 @@ release or model switch—not a statistical latency claim.
 If it passes, run the contract that matters to your feature:
 
 ```bash
-llm-bench benchmark.json --tests structured-output-check
-llm-bench benchmark.json --tests exact-routing-check
+llm-preflight benchmark.json --tests structured-output-check
+llm-preflight benchmark.json --tests exact-routing-check
 ```
 
 See [Custom contract tests](custom-tests.md) for copyable examples and guidance
@@ -45,14 +45,14 @@ keeps temporary candidates separate from permanent approved models, and uses
 the normal interactive benchmark screen for the paid run.
 
 ```bash
-llm-bench catalog init
-llm-bench catalog refresh benchmarks/watch.json
+llm-preflight catalog init
+llm-preflight catalog refresh benchmarks/watch.json
 # Only if the catalogue says a model "Needs one probe":
-llm-bench catalog probe benchmarks/watch.json
-llm-bench catalog prepare benchmarks/watch.json \
+llm-preflight catalog probe benchmarks/watch.json
+llm-preflight catalog prepare benchmarks/watch.json \
   --against benchmarks/approved.json --output benchmarks/candidates.json
-llm-bench benchmarks/candidates.json --migration-check
-llm-bench benchmarks/candidates.json --interactive \
+llm-preflight benchmarks/candidates.json --migration-check
+llm-preflight benchmarks/candidates.json --interactive \
   --approve-to benchmarks/approved.json
 ```
 
@@ -83,8 +83,8 @@ source requires a positive `limit` as a cost-safety control.
 ```
 
 ```bash
-llm-bench benchmark.auto.example.json --catalog
-llm-bench benchmark.auto.example.json --interactive
+llm-preflight benchmark.auto.example.json --catalog
+llm-preflight benchmark.auto.example.json --interactive
 ```
 
 Interactive benchmark mode presents a run plan before confirmation. Model
@@ -97,15 +97,15 @@ tutorial.
 
 ```bash
 # Reduced live run: one repetition, no warmups, normal concurrency one.
-llm-bench benchmark.json --smoke --dry-run
-llm-bench benchmark.json --smoke
+llm-preflight benchmark.json --smoke --dry-run
+llm-preflight benchmark.json --smoke
 
 # Configuration and pricing checks without generation.
-llm-bench benchmark.json --doctor
-llm-bench benchmark.json --pricing-check
+llm-preflight benchmark.json --doctor
+llm-preflight benchmark.json --pricing-check
 
 # One prompt without a config file.
-llm-bench --quick "Reply with ok." --models mock:local --no-save
+llm-preflight --quick "Reply with ok." --models mock:local --no-save
 ```
 
 Smoke mode still makes paid requests. It reduces normal request settings but
@@ -118,7 +118,7 @@ Use `--tests` (or the compatibility alias `--profiles`) to select built-in and
 custom tests together:
 
 ```bash
-llm-bench benchmark.json --tests exact-routing-check,source-to-quiz
+llm-preflight benchmark.json --tests exact-routing-check,source-to-quiz
 ```
 
 Choose `--stop-on api-error`, `test-fail`, or `any-fail`; omit `--stop-on` to
@@ -129,11 +129,11 @@ status. See [CI and JSON output](ci.md) for automation recipes.
 ## Compare and automate
 
 ```bash
-llm-bench --diff results/old.json results/new.json
-llm-bench benchmark.json --baseline results/old.json --ci
-llm-bench --replay results/run.json
-llm-bench benchmark.json --tests all --matrix
-llm-bench benchmark.auto.json --changed-since catalog.json --dry-run
+llm-preflight --diff results/old.json results/new.json
+llm-preflight benchmark.json --baseline results/old.json --ci
+llm-preflight --replay results/run.json
+llm-preflight benchmark.json --tests all --matrix
+llm-preflight benchmark.auto.json --changed-since catalog.json --dry-run
 ```
 
 `--changed-since` runs only discovered models absent from a previous catalog

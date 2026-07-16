@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-speed-bench"
+version = "2.0.0"
+description = "Compatibility shim for the renamed llm-preflight package"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["llm-preflight>=2.0.0,<3.0.0"]
+
+[project.scripts]
+llm-bench = "llm_bench.cli:main"
+
+[tool.setuptools]
+py-modules = []

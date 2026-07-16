@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/llm-speed-bench
+      url: https://test.pypi.org/p/llm-preflight
     permissions:
       id-token: write
     steps:
@@ -63,7 +63,7 @@ jobs:
             if .testpypi-venv/bin/pip install \
               --index-url https://test.pypi.org/simple/ \
               --extra-index-url https://pypi.org/simple/ \
-              "llm-speed-bench==${VERSION}"; then
+              "llm-preflight==${VERSION}"; then
               exit 0
             fi
             if [ "${attempt}" -eq 8 ]; then
@@ -71,4 +71,4 @@ jobs:
             fi
             sleep 15
           done
-      - run: .testpypi-venv/bin/llm-bench --quick "Reply with ok." --models mock:local --no-save
+      - run: .testpypi-venv/bin/llm-preflight --quick "Reply with ok." --models mock:local --no-save

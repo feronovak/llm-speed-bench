@@ -57,7 +57,7 @@
       "model": "replace-with-openrouter-model-id",
       "headers": {
         "HTTP-Referer": "https://your-app.example",
-        "X-OpenRouter-Title": "LLM Speed Bench"
+        "X-OpenRouter-Title": "LLM Preflight"
       }
     },
     {

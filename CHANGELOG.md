@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 2.0.0 - Unreleased
+
+### Changed
+
+- Rename the project and primary PyPI distribution to **LLM Preflight**
+  (`llm-preflight`): a local, cross-provider preflight for a model switch.
+- Make `llm-preflight` the primary command while retaining `llm-bench` and the
+  `llm_bench` Python import namespace as supported compatibility interfaces.
+- Update public documentation, examples, package artifacts, and release
+  automation to use the new product name and primary command.
+
 ## 1.2.2 - 2026-07-16
 
 ### Fixed
