@@ -55,7 +55,8 @@ from .runner import (
 )
 
 
-_ENV_TEMPLATE = """# Fill only the providers you use. Never commit this file.
+_ENV_TEMPLATE = """# Copy this file to .env.production beside your benchmark configuration.
+# Fill only the providers you use. Never commit .env.production.
 
 OPENAI_API_KEY=""
 ANTHROPIC_API_KEY=""

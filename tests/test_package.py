@@ -7,7 +7,7 @@ from llm_bench.runner import run_benchmark
 
 
 def test_package_version_is_stable_release():
-    assert __version__ == "1.2.0"
+    assert __version__ == "1.2.1"
 
 
 def test_build_backend_supports_editable_installs_without_an_unnecessary_floor():
@@ -21,7 +21,7 @@ def test_legacy_installer_has_explicit_package_metadata_fallback():
     setup = Path("setup.py").read_text()
 
     assert 'name="llm-speed-bench"' in setup
-    assert 'version="1.2.0"' in setup
+    assert 'version="1.2.1"' in setup
     assert 'entry_points={"console_scripts": ["llm-bench=llm_bench.cli:main"]}' in setup
 
 

@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 1.2.1 - 2026-07-16
+
+### Fixed
+
+- Keep the credential-free `.env.production` template created by `catalog init`
+  identical to the checked-in `.env.example` template.
+
 ## 1.2.0 - 2026-07-16
 
 ### Added
