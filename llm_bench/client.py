@@ -12,6 +12,7 @@ from typing import Any
 from .security import require_http_url
 
 TokenUsage = dict[str, int | None]
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
 
 PROVIDER_DEFAULTS = {
@@ -52,7 +53,11 @@ def _supports_temperature(model: dict[str, Any]) -> bool:
     provider = model.get("provider")
     model_id = model["model"]
     if provider == "openai":
-        return not (model_id == "gpt-5.5" or model_id.startswith("gpt-5.5-"))
+        return not (
+            model_id == "gpt-5.5"
+            or model_id.startswith("gpt-5.5-")
+            or model_id.startswith("gpt-5.6-")
+        )
     if provider == "anthropic":
         return model_id not in {
             "claude-sonnet-5",
@@ -168,6 +173,7 @@ class ProviderClient(ABC):
         last_error = ""
         last_category = "provider_error"
         for attempt in range(1, retry["max_attempts"] + 1):
+            require_http_url(self.endpoint())
             request = urllib.request.Request(
                 self.endpoint(),
                 data=json.dumps(self.body(prompt, request_options)).encode(),
@@ -185,7 +191,13 @@ class ProviderClient(ABC):
                 with urllib.request.urlopen(  # nosec B310
                     request, timeout=self.timeout
                 ) as response:
+                    response_bytes = 0
                     for raw_line in response:
+                        response_bytes += len(raw_line)
+                        if response_bytes > MAX_RESPONSE_BYTES:
+                            raise ValueError(
+                                "provider response exceeded the 8 MiB safety limit"
+                            )
                         line = raw_line.decode("utf-8", errors="replace").strip()
                         if not line.startswith("data:"):
                             continue
@@ -329,6 +341,74 @@ class OpenAICompatibleClient(ProviderClient):
         return text, normalized
 
 
+class OpenAIResponsesClient(OpenAICompatibleClient):
+    """OpenAI's Responses endpoint, used first for capability probes."""
+
+    def endpoint(self) -> str:
+        return self.model["base_url"].rstrip("/") + "/responses"
+
+    def body(self, prompt: str, options: dict[str, Any]) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "model": self.model["model"],
+            "input": prompt,
+            "store": False,
+        }
+        limit = options.get("max_output_tokens", options.get("max_tokens"))
+        if limit is not None:
+            body["max_output_tokens"] = limit
+        return body
+
+    def run(self, prompt: str, request_options: dict[str, Any]) -> dict[str, Any]:
+        started = time.perf_counter()
+        key_env = self.model.get("api_key_env")
+        api_key = os.environ.get(key_env) if key_env else None
+        if key_env and not api_key:
+            return self._failure(
+                started, f"environment variable {key_env!r} is not set"
+            )
+        try:
+            require_http_url(self.endpoint())
+            request = urllib.request.Request(
+                self.endpoint(),
+                data=json.dumps(self.body(prompt, request_options)).encode(),
+                headers={"Content-Type": "application/json", **self.headers(api_key)},
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:  # nosec B310
+                body = response.read(MAX_RESPONSE_BYTES + 1)
+            if len(body) > MAX_RESPONSE_BYTES:
+                raise ValueError("provider response exceeded the 8 MiB safety limit")
+            payload = json.loads(body)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read(2000).decode("utf-8", errors="replace")
+            return self._failure(started, f"HTTP {exc.code}: {detail}")
+        except (OSError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+            return self._failure(started, str(exc))
+        usage = payload.get("usage") or {}
+        text = str(payload.get("output_text") or "")
+        if not text:
+            for output in payload.get("output") or []:
+                for content in output.get("content") or []:
+                    if content.get("type") in {"output_text", "text"}:
+                        text += str(content.get("text") or "")
+        finished = time.perf_counter()
+        return {
+            "ok": bool(text),
+            "latency_seconds": finished - started,
+            "ttft_seconds": None,
+            "output_tokens_per_second": None,
+            "input_tokens": usage.get("input_tokens"),
+            "output_tokens": usage.get("output_tokens"),
+            "response_chars": len(text),
+            "response": text,
+            "error": None if text else "Responses API returned no text output",
+            "attempts": 1,
+            "retry_count": 0,
+            "retry_reasons": [],
+            "failure_category": None if text else "provider_error",
+        }
+
+
 class AnthropicClient(ProviderClient):
     def endpoint(self) -> str:
         return self.model["base_url"].rstrip("/") + "/messages"
@@ -456,7 +536,7 @@ def create_client(model: dict[str, Any], timeout: float) -> ProviderClient:
             f"model {model.get('name', model.get('model'))!r} requires base_url "
             f"for provider {provider!r}"
         )
-    require_http_url(resolved["base_url"])
+    require_http_url(resolved["base_url"], resolve_host=False)
     adapters: dict[str, Any] = {
         "openai": OpenAICompatibleClient,
         "openrouter": OpenAICompatibleClient,
@@ -467,7 +547,11 @@ def create_client(model: dict[str, Any], timeout: float) -> ProviderClient:
         "mock": MockClient,
     }
     try:
-        adapter = adapters[provider]
+        adapter = (
+            OpenAIResponsesClient
+            if resolved.get("adapter") == "openai_responses"
+            else adapters[provider]
+        )
     except KeyError as exc:
         raise ValueError(
             f"unsupported provider {provider!r}; choose {', '.join(sorted(adapters))}"

@@ -1,0 +1,37 @@
+{
+  "name": "ticket-extraction-contract",
+  "profiles": "ticket-extraction",
+  "suite_repetitions": 1,
+  "warmups": 0,
+  "request": {
+    "temperature": 0,
+    "max_output_tokens": 200
+  },
+  "models": [
+    {
+      "name": "local-example",
+      "provider": "mock",
+      "model": "local",
+      "response": "{\"product\":\"Checkout\",\"priority\":\"high\"}"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "ticket-extraction",
+      "description": "Extract the fields required by a production support workflow.",
+      "system_prompt": "Return only valid JSON. Do not include Markdown.",
+      "prompt": "Urgent: payments are failing in Checkout.",
+      "presets": ["structured"],
+      "validation": {
+        "json_schema": {
+          "type": "object",
+          "required": ["product", "priority"],
+          "properties": {
+            "product": {"type": "string"},
+            "priority": {"type": "string", "enum": ["high", "medium", "low"]}
+          }
+        }
+      }
+    }
+  ]
+}

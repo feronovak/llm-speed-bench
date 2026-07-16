@@ -6,10 +6,37 @@ import pytest
 from llm_bench.client import (
     AnthropicClient,
     GeminiClient,
+    MAX_RESPONSE_BYTES,
     OpenAICompatibleClient,
+    OpenAIResponsesClient,
     _retry_delay,
     create_client,
 )
+
+
+def test_openai_responses_adapter_uses_minimal_safe_probe_request():
+    client = create_client(
+        {"provider": "openai", "model": "gpt-test", "adapter": "openai_responses"},
+        10,
+    )
+
+    assert isinstance(client, OpenAIResponsesClient)
+    assert client.endpoint() == "https://api.openai.com/v1/responses"
+    assert client.body("Reply with OK.", {"max_output_tokens": 32}) == {
+        "model": "gpt-test",
+        "input": "Reply with OK.",
+        "max_output_tokens": 32,
+        "store": False,
+    }
+
+
+@pytest.fixture(autouse=True)
+def _resolve_provider_hosts_to_a_public_address(monkeypatch):
+    """Keep unit fixtures independent from the machine's DNS configuration."""
+    monkeypatch.setattr(
+        "llm_bench.security.socket.getaddrinfo",
+        lambda *args, **kwargs: [(2, 1, 6, "", ("8.8.8.8", 443))],
+    )
 
 
 def test_factory_applies_openai_defaults():
@@ -22,8 +49,11 @@ def test_factory_applies_openai_defaults():
     assert "max_tokens" not in body
 
 
-def test_gpt_5_5_omits_unsupported_temperature():
-    client = create_client({"provider": "openai", "model": "gpt-5.5"}, 10)
+@pytest.mark.parametrize(
+    "model", ["gpt-5.5", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
+)
+def test_current_gpt_models_omit_unsupported_temperature(model):
+    client = create_client({"provider": "openai", "model": model}, 10)
     body = client.body("hello", {"temperature": 0, "max_output_tokens": 16})
     assert "temperature" not in body
 
@@ -411,6 +441,30 @@ def test_client_does_not_retry_non_retryable_http_error(monkeypatch):
     assert sample["attempts"] == 1
     assert sample["retry_count"] == 0
     assert sample["failure_category"] == "unsupported_parameter"
+
+
+def test_client_rejects_an_oversized_streaming_response(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def __iter__(self):
+            return iter([b"data: " + b"x" * MAX_RESPONSE_BYTES])
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setattr(
+        "urllib.request.urlopen", lambda request, timeout: FakeResponse()
+    )
+
+    sample = create_client({"provider": "openai", "model": "model-a"}, 10).run(
+        "hello", {"retry": {"max_attempts": 1}}
+    )
+
+    assert sample["ok"] is False
+    assert "8 MiB safety limit" in sample["error"]
 
 
 def test_retry_delay_adds_bounded_jitter(monkeypatch):

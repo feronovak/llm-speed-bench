@@ -7,29 +7,31 @@ from typing import Any
 
 BUILTIN_PROFILES: list[dict[str, Any]] = [
     {
-        "name": "chat-fast",
-        "description": "Short interactive answers; emphasizes TTFT and latency.",
+        "name": "quick-migration-check",
+        "description": (
+            "API compatibility, basic response contract, TTFT, and latency."
+        ),
         "cases": [
             {
                 "id": "chat-capital",
                 "prompt": "Answer in one short sentence: What is the capital of France?",
-                "evaluator": {"type": "nonempty"},
+                "evaluator": {"type": "contains", "contains": "Paris"},
             },
             {
                 "id": "chat-summary",
                 "prompt": "Summarize in one sentence: A customer changed their email address and can no longer log in.",
-                "evaluator": {"type": "nonempty"},
+                "evaluator": {"type": "contains", "contains": "email"},
             },
             {
                 "id": "chat-rewrite",
                 "prompt": "Rewrite politely in one sentence: Send the report today.",
-                "evaluator": {"type": "nonempty"},
+                "evaluator": {"type": "regex", "regex": "(?i)please.*report.*today"},
             },
         ],
     },
     {
-        "name": "classification",
-        "description": "Exact-label classification accuracy.",
+        "name": "exact-routing-check",
+        "description": "Exact routing labels for downstream queues or actions.",
         "system_prompt": "Return only the requested lowercase label.",
         "cases": [
             {
@@ -50,8 +52,8 @@ BUILTIN_PROFILES: list[dict[str, Any]] = [
         ],
     },
     {
-        "name": "structured-extraction",
-        "description": "JSON validity and exact required-field extraction.",
+        "name": "structured-output-check",
+        "description": "JSON shape, required fields, and exact extracted values.",
         "system_prompt": "Return only valid JSON with no Markdown formatting.",
         "presets": ["structured"],
         "request": {"max_output_tokens": 512},
@@ -86,8 +88,8 @@ BUILTIN_PROFILES: list[dict[str, Any]] = [
         ],
     },
     {
-        "name": "reasoning",
-        "description": "Deterministic arithmetic and logic correctness.",
+        "name": "numeric-instruction-check",
+        "description": "Numeric task correctness and concise instruction following.",
         "system_prompt": "Return only the final numeric answer.",
         "cases": [
             {
@@ -97,7 +99,11 @@ BUILTIN_PROFILES: list[dict[str, Any]] = [
                     "Return only the numeric answer. Do not include units, words, "
                     "or explanation."
                 ),
-                "evaluator": {"type": "numeric", "expected": 100, "tolerance": 0},
+                "evaluator": {
+                    "type": "numeric_answer",
+                    "expected": 100,
+                    "tolerance": 0,
+                },
             },
             {
                 "id": "reason-rate",
@@ -106,7 +112,11 @@ BUILTIN_PROFILES: list[dict[str, Any]] = [
                     "in km/h? Return only the numeric answer. Do not include units, "
                     "words, or explanation."
                 ),
-                "evaluator": {"type": "numeric", "expected": 50, "tolerance": 0},
+                "evaluator": {
+                    "type": "numeric_answer",
+                    "expected": 50,
+                    "tolerance": 0,
+                },
             },
             {
                 "id": "reason-sequence",
@@ -114,27 +124,54 @@ BUILTIN_PROFILES: list[dict[str, Any]] = [
                     "What is the next number: 2, 6, 12, 20, 30? Return only the "
                     "numeric answer. Do not include units, words, or explanation."
                 ),
-                "evaluator": {"type": "numeric", "expected": 42, "tolerance": 0},
+                "evaluator": {
+                    "type": "numeric_answer",
+                    "expected": 42,
+                    "tolerance": 0,
+                },
             },
         ],
     },
     {
-        "name": "load",
-        "description": "Latency and reliability under increasing concurrency.",
+        "name": "concurrency-health-check",
+        "description": "Basic reliability and latency under increasing concurrency.",
         "concurrency_levels": [1, 5, 10],
         "cases": [
             {
                 "id": "load-short",
                 "prompt": "Reply with exactly: benchmark",
                 "evaluator": {"type": "exact", "expected": "benchmark"},
-            }
+            },
+            {
+                "id": "load-route",
+                "prompt": "Reply with exactly: ready",
+                "evaluator": {"type": "exact", "expected": "ready"},
+            },
         ],
     },
 ]
 
 
+PROFILE_ALIASES = {
+    "chat-fast": "quick-migration-check",
+    "classification": "exact-routing-check",
+    "structured-extraction": "structured-output-check",
+    "reasoning": "numeric-instruction-check",
+    "load": "concurrency-health-check",
+}
+
+
+def normalize_profile_selector(selector: str) -> str:
+    """Map legacy built-in profile names while preserving custom test names."""
+    return ",".join(
+        PROFILE_ALIASES.get(item.strip(), item.strip())
+        for item in selector.split(",")
+        if item.strip()
+    )
+
+
 def select_profiles(selector: str) -> list[dict[str, Any]]:
-    requested = [item.strip() for item in selector.split(",") if item.strip()]
+    requested = normalize_profile_selector(selector).split(",")
     names = [profile["name"] for profile in BUILTIN_PROFILES]
     if requested == ["all"]:
         return BUILTIN_PROFILES
@@ -213,6 +250,21 @@ def evaluate_response(response: str, evaluator: dict[str, Any]) -> dict[str, Any
             return {"score": 0.0, "valid": False, "error": "not a numeric answer"}
         valid = abs(actual - float(evaluator["expected"])) <= float(
             evaluator.get("tolerance", 0)
+        )
+        return {
+            "score": 1.0 if valid else 0.0,
+            "valid": valid,
+            "error": None if valid else "numeric answer outside tolerance",
+        }
+    if evaluator_type == "numeric_answer":
+        matches = re.findall(r"[-+]?\d[\d,]*(?:\.\d+)?", response)
+        if not matches:
+            return {"score": 0.0, "valid": False, "error": "not a numeric answer"}
+        expected = float(evaluator["expected"])
+        tolerance = float(evaluator.get("tolerance", 0))
+        valid = any(
+            abs(float(match.replace(",", "")) - expected) <= tolerance
+            for match in matches
         )
         return {
             "score": 1.0 if valid else 0.0,

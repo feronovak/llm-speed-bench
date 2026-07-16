@@ -14,6 +14,9 @@ dist/
 .env.*
 !.env.example
 benchmark.json
+benchmark.watch.json
+benchmark.approved.json
+benchmarks/
 
 # Generated benchmark data and local diagnostics
 results/
@@ -24,6 +27,7 @@ AGENTS.md
 LAUNCH.md
 RELEASING.md
 ROADMAP.md
+security_best_practices_report.md
 
 # Editors and operating systems
 .DS_Store

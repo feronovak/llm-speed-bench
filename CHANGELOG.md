@@ -2,6 +2,37 @@
 
 All notable changes to this project are documented here.
 
+## 1.2.0 - 2026-07-16
+
+### Added
+
+- Add the local model lifecycle: `catalog init`, `catalog refresh`, and
+  `catalog prepare`, followed by the normal interactive benchmark flow and
+  explicit `models approve` promotion.
+- Add local catalogue snapshots and model-change diffs; retain `watch-new` and
+  `approve-model` as compatibility aliases.
+- Add interactive `--approve-to` promotion, explicit retry-risk acceptance,
+  and candidate-plan `--replace` protection.
+- Classify catalogue entries as ready text benchmarks, text candidates needing
+  one explicit probe, or incompatible generic-text endpoints using provider and
+  OpenRouter capability evidence.
+- Add `catalog probe` and a local, permission-restricted capability ledger that
+  records only safe compatibility evidence, never response text or credentials.
+- Add `--migration-check`: a one-repetition, no-warmup three-case response and
+  basic-contract preflight for comparing a candidate model with an incumbent.
+- Add a custom-contract tutorial and runnable mock examples for JSON extraction,
+  exact intent routing, and required-content validation.
+- Rename default test packs around their user value: quick migration, exact
+  routing, structured output, numeric instruction, and concurrency health.
+  Keep the former selectors as compatibility aliases.
+
+### Fixed
+
+- Refuse a concurrent benchmark targeting the same results directory before it
+  can issue duplicate paid requests.
+- Migrate legacy catalogue snapshots without reporting every model as changed
+  solely because richer capability metadata was introduced.
+
 ## 1.0.3 - 2026-07-13
 
 ### Changed

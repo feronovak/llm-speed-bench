@@ -28,6 +28,7 @@ one top-level `prompt` or one or more named `prompts`.
 | `max_estimated_cost_usd` | — | Reject a run whose retry-expanded cost exceeds this. |
 | `aliases` | `{}` | Named model definitions. |
 | `environments` | `{}` | Named shallow config overlays selected with `--env`. |
+| `approvals` | `[]` | Local `models approve` audit entries; ignored by benchmark runs. |
 
 ## `request`
 
@@ -51,9 +52,10 @@ and `retry_on` (`rate_limit`, `timeout`, `transient_provider`, `network`).
 A model requires `model`; `provider` defaults to `openai_compatible`. Useful
 optional model fields are `name`, `base_url`, `api_key_env`, `api_version`,
 `headers`, `input_cost_per_million`, `output_cost_per_million`,
-`max_tokens_parameter`, `supports_temperature`, and `capabilities`. Mock models
-also accept `response`, `latency_seconds`, and `ttft_seconds` for deterministic
-local fixtures.
+`max_tokens_parameter`, and `supports_temperature`. `capabilities` is advanced
+provider metadata; catalogue refresh and probes maintain it automatically, so
+most users should not set it manually. Mock models also accept `response`,
+`latency_seconds`, and `ttft_seconds` for deterministic local fixtures.
 
 Supported provider names are `openai`, `anthropic`, `gemini`, `xai`,
 `openrouter`, `openai_compatible`, and `mock`. A discovery object requires
@@ -69,8 +71,8 @@ Each prompt requires unique `name` and either non-empty `prompt` or a relative
 `system_prompt`, `request`, `validation`, and `presets`.
 
 Validation supports `contains`, `regex`, and `json_schema`; an absent custom
-validation means non-empty output. Built-in profiles also use exact, numeric,
-and JSON-subset evaluators. The supported JSON Schema subset handles object
+validation means non-empty output. Built-in packs also use exact, numeric, and
+JSON-subset evaluators. The supported JSON Schema subset handles object
 `required`/`properties`, arrays and item limits, primitive `type`, and `enum`.
 
 `aliases` maps a name to a model object; use its name in `models`. An

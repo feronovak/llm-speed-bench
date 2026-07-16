@@ -2,6 +2,7 @@ import pytest
 
 from llm_bench.features import (
     apply_environment,
+    apply_migration_check,
     apply_model_aliases,
     apply_provider_presets,
     apply_smoke_mode,
@@ -38,6 +39,25 @@ def test_smoke_mode_forces_one_repetition_without_warmup():
     assert config["suite_repetitions"] == 1
     assert config["warmups"] == 0
     assert config["name"].endswith("-smoke")
+
+
+def test_migration_check_uses_the_fast_response_contract_once_per_model():
+    config = apply_migration_check(
+        {
+            "name": "candidate-review",
+            "prompt": "ignored by the built-in profile",
+            "profiles": "reasoning",
+            "suite_repetitions": 9,
+            "warmups": 3,
+            "concurrency": 5,
+        }
+    )
+
+    assert config["profiles"] == "quick-migration-check"
+    assert config["suite_repetitions"] == 1
+    assert config["warmups"] == 0
+    assert config["concurrency"] == 1
+    assert config["name"] == "candidate-review-migration-check"
 
 
 def test_doctor_report_flags_missing_keys_and_model_count(monkeypatch):

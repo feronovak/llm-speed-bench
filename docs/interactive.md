@@ -1,23 +1,78 @@
-# Interactive mode
+# Interactive benchmark mode
 
-Run `llm-bench benchmark.json --interactive` to select the work at the terminal
-instead of passing selectors on the command line. The session has three stages:
+Interactive mode is the guided form of a normal benchmark. Use it when you want
+to decide the models and tests at the terminal, then see the paid-work plan
+before anything is sent:
 
-1. **Select** models, tests, repetitions, and stop mode.
-2. **Preview** the paid work: request count, retry-expanded maximum, estimated
-   cost, retention mode, and test breakdown.
-3. **Run** only after confirming `y`; live progress distinguishes API and test
-   status for every request.
+```bash
+llm-bench benchmark.json --interactive
+```
+
+For the fastest non-interactive decision, run this first:
+
+```bash
+llm-bench benchmark.json --migration-check --dry-run
+llm-bench benchmark.json --migration-check
+```
+
+It runs the three `quick-migration-check` response-contract cases once per
+selected model.
+Use interactive mode next when you need to choose a deeper task contract and
+repetitions.
+
+It has three stages:
+
+1. **Select** — choose models, tests, repetitions, and when to stop.
+2. **Preview** — read the exact request count, retry maximum, estimated cost,
+   retention setting, and per-test breakdown.
+3. **Run** — type `y` only when the plan is right. Progress reports distinguish
+   `API FAIL` from `API OK / TEST FAIL`.
 
 ![Cancelled mock interactive session](images/interactive-mock-session.svg)
 
-This is a real session from the no-key mock config created by `llm-bench --init`.
-It was cancelled at confirmation, so it made no network or paid request.
+This capture uses the no-key mock config created by `llm-bench --init`. It was
+cancelled at confirmation, so it made no network or paid request.
 
-Select models by number, provider, provider/family, or `all`. Select tests by
-number, name, or `all`; pressing Enter uses the config's top-level prompt.
-Choose `never` in the interactive menu to run every selected model. On the
-command line, achieve the same behavior by omitting `--stop-on`.
+## How to answer the prompts
 
-Interactive mode cannot be combined with `--catalog`, `--tests`, `--profiles`,
-or `--prompt`. Use [CLI reference](cli-reference.md) for all combinations.
+- Models: enter numbers, a provider such as `openai`, a provider/family such as
+  `openrouter/qwen`, or `all`.
+- Tests: enter numbers, names, or `all`. Press Enter to use the config's
+  default prompt instead of a built-in test suite.
+- Stop mode: choose whether to stop on an API error, failed test, either, or
+  **never**. “Never” is the menu wording for “run every selected model”; on the
+  command line, simply omit `--stop-on`.
+- Retry safety: if retries could exceed `max_requests`, the screen requires the
+  exact `ACCEPT N` value. A typo explains the required text and lets you try
+  again; Enter cancels.
+
+Use smoke mode when you only need a low-cost compatibility check. It still makes
+live requests. One repetition answers “did it work here?”; it does not establish
+a reliable latency or quality ranking.
+
+## Catalogue work is separate on purpose
+
+`catalog probe` has a small selector and confirmation screen too, but it is not
+an interactive benchmark. It sends one minimal compatibility request for a
+text candidate and records no response text. Run it before creating a candidate
+plan only when the catalogue labels a model **Needs one probe**:
+
+```bash
+llm-bench catalog probe benchmarks/watch.json
+```
+
+The paid comparison remains one consistent flow:
+
+```bash
+llm-bench benchmarks/candidates.json --interactive \
+  --approve-to benchmarks/approved.json
+```
+
+After a saved run, `--approve-to` offers passing candidate models for explicit
+approval. It never adds them silently.
+
+Interactive benchmark mode cannot be combined with `--catalog`, `--tests`,
+`--profiles`, `--prompt`, or `--migration-check`. For scripted equivalents and
+every flag, see the
+[CLI reference](cli-reference.md). For the complete model lifecycle, see
+[Model catalogue](model-watch.md).

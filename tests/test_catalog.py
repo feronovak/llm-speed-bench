@@ -1,6 +1,122 @@
 import pytest
 
-from llm_bench.catalog import discover_models, resolve_models
+from llm_bench.catalog import classify_catalog_model, discover_models, resolve_models
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        (
+            {
+                "model": "vendor/chat",
+                "capabilities": {
+                    "input_modalities": ["text"],
+                    "output_modalities": ["text"],
+                },
+            },
+            ("text-chat", "official"),
+        ),
+        (
+            {
+                "model": "vendor/image",
+                "capabilities": {"output_modalities": ["image"]},
+            },
+            ("image", "official"),
+        ),
+        ({"model": "gpt-realtime-2"}, ("realtime", "heuristic")),
+        ({"model": "future-model"}, ("unknown", "unknown")),
+    ],
+)
+def test_catalog_classification_prefers_metadata_and_is_conservative(model, expected):
+    classified = classify_catalog_model(model)
+
+    assert (classified["catalog_type"], classified["catalog_confidence"]) == expected
+
+
+def test_anthropic_catalog_preserves_official_capabilities(monkeypatch):
+    monkeypatch.setattr(
+        "llm_bench.catalog._get_json",
+        lambda *args, **kwargs: {
+            "data": [
+                {
+                    "id": "claude-test",
+                    "display_name": "Claude Test",
+                    "capabilities": {"structured_outputs": {"supported": True}},
+                }
+            ]
+        },
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+
+    model = discover_models({"provider": "anthropic", "limit": 1})[0]
+
+    assert model["catalog_type"] == "text-ready"
+    assert model["capabilities"]["structured_outputs"]["supported"] is True
+    assert model["capability_evidence"][0]["source"] == "official"
+
+
+def test_xai_uses_language_models_for_official_modalities(monkeypatch):
+    captured = []
+
+    def fake_get_json(url, *args, **kwargs):
+        captured.append(url)
+        if not url.endswith("/language-models"):
+            return {"models": []}
+        return {
+            "models": [
+                {
+                    "id": "grok-text",
+                    "input_modalities": ["text"],
+                    "output_modalities": ["text"],
+                    "fingerprint": "fp-test",
+                }
+            ]
+        }
+
+    monkeypatch.setattr("llm_bench.catalog._get_json", fake_get_json)
+    monkeypatch.setenv("XAI_API_KEY", "test")
+
+    model = discover_models({"provider": "xai", "limit": 1})[0]
+
+    assert captured == [
+        "https://api.x.ai/v1/language-models",
+        "https://api.x.ai/v1/image-generation-models",
+        "https://api.x.ai/v1/video-generation-models",
+    ]
+    assert model["catalog_type"] == "text-ready"
+    assert model["capabilities"]["fingerprint"] == "fp-test"
+
+
+def test_openai_text_family_is_visible_as_a_probe_candidate(monkeypatch):
+    monkeypatch.setattr(
+        "llm_bench.catalog._get_json",
+        lambda *args, **kwargs: {"data": [{"id": "gpt-5.5"}]},
+    )
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+
+    model = discover_models({"provider": "openai", "limit": 1})[0]
+
+    assert model["catalog_type"] == "text-candidate"
+    assert model["capabilities"]["adapter"] == "openai_responses"
+
+
+def test_gemini_tts_is_not_a_generic_text_probe(monkeypatch):
+    monkeypatch.setattr(
+        "llm_bench.catalog._get_json",
+        lambda *args, **kwargs: {
+            "models": [
+                {
+                    "name": "models/gemini-2.5-flash-preview-tts",
+                    "supportedGenerationMethods": ["generateContent"],
+                }
+            ]
+        },
+    )
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+
+    model = discover_models({"provider": "gemini", "limit": 1})[0]
+
+    assert model["catalog_type"] == "audio"
 
 
 def test_openrouter_normalization_and_limit(monkeypatch):
@@ -38,6 +154,7 @@ def test_openrouter_normalization_and_limit(monkeypatch):
     assert models[0]["capabilities"]["reasoning"] is True
     assert models[0]["input_cost_per_million"] == 1
     assert models[0]["output_cost_per_million"] == 2
+    assert models[0]["pricing_metadata"]["source"] == "openrouter routed"
 
 
 def test_gemini_filters_non_generation_models(monkeypatch):
@@ -64,17 +181,21 @@ def test_gemini_filters_non_generation_models(monkeypatch):
     assert models[0]["capabilities"]["reasoning"] is True
 
 
-def test_xai_catalog_uses_native_models_endpoint_and_pricing(monkeypatch):
-    captured = {}
+def test_xai_catalog_uses_native_language_models_endpoint_and_pricing(monkeypatch):
+    captured = []
 
     def fake_get_json(url, key_env, headers=None):
-        captured.update(url=url, key_env=key_env)
+        captured.append((url, key_env))
+        if not url.endswith("/language-models"):
+            return {"models": []}
         return {
-            "data": [
+            "models": [
                 {
                     "id": "grok-4.3",
                     "created": 1,
                     "owned_by": "xai",
+                    "input_modalities": ["text"],
+                    "output_modalities": ["text"],
                 }
             ]
         }
@@ -82,10 +203,11 @@ def test_xai_catalog_uses_native_models_endpoint_and_pricing(monkeypatch):
     monkeypatch.setattr("llm_bench.catalog._get_json", fake_get_json)
     monkeypatch.setenv("XAI_API_KEY", "test")
     models = discover_models({"provider": "xai", "limit": 1})
-    assert captured == {
-        "url": "https://api.x.ai/v1/models",
-        "key_env": "XAI_API_KEY",
-    }
+    assert captured == [
+        ("https://api.x.ai/v1/language-models", "XAI_API_KEY"),
+        ("https://api.x.ai/v1/image-generation-models", "XAI_API_KEY"),
+        ("https://api.x.ai/v1/video-generation-models", "XAI_API_KEY"),
+    ]
     assert models[0]["provider"] == "xai"
     assert models[0]["model"] == "grok-4.3"
     assert models[0]["input_cost_per_million"] == 1.25
@@ -104,6 +226,54 @@ def test_resolve_deduplicates_explicit_and_discovered(monkeypatch):
         }
     )
     assert len(models) == 1
+
+
+def test_resolve_enriches_matching_direct_model_from_openrouter_metadata():
+    models = resolve_models(
+        {
+            "models": [
+                {"provider": "openai", "model": "gpt-new"},
+                {
+                    "provider": "openrouter",
+                    "model": "openai/gpt-new",
+                    "capabilities": {
+                        "input_modalities": ["text"],
+                        "output_modalities": ["text"],
+                        "supported_parameters": ["max_tokens"],
+                    },
+                },
+            ]
+        }
+    )
+
+    assert models[0]["catalog_type"] == "text-chat"
+    assert models[0]["catalog_confidence"] == "aggregator"
+    assert models[0]["capabilities"]["supported_parameters"] == ["max_tokens"]
+
+
+def test_resolve_enriches_anthropic_version_separator_match():
+    models = resolve_models(
+        {
+            "models": [
+                {
+                    "provider": "anthropic",
+                    "model": "claude-opus-4-8",
+                    "capabilities": {"text_generation": "ready"},
+                },
+                {
+                    "provider": "openrouter",
+                    "model": "anthropic/claude-opus-4.8",
+                    "capabilities": {
+                        "output_modalities": ["text"],
+                        "supported_parameters": ["temperature"],
+                    },
+                },
+            ]
+        }
+    )
+
+    assert models[0]["capabilities"]["supported_parameters"] == ["temperature"]
+    assert models[0]["capability_evidence"][-1]["source"] == "openrouter-normalized"
 
 
 def test_resolve_adds_public_registry_pricing_and_preserves_overrides():

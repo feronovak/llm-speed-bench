@@ -6,6 +6,7 @@ import os
 import platform
 import re
 import uuid
+from contextlib import contextmanager
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -17,8 +18,28 @@ from .client import create_client
 from .metrics import summarize
 from .presets import expand_presets
 from .pricing import pricing_freshness_report
-from .profiles import evaluate_response, select_profiles
+from .profiles import evaluate_response, normalize_profile_selector, select_profiles
 from .redaction import redact_secrets
+
+
+@contextmanager
+def benchmark_run_lock(output_dir: Path):
+    """Prevent two processes spending money on the same result directory."""
+    import fcntl
+
+    output_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock_path = output_dir / ".llm-bench.run.lock"
+    descriptor = os.open(lock_path, os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ValueError(
+                f"a benchmark is already running for {output_dir}; wait for it to finish"
+            ) from exc
+        yield
+    finally:
+        os.close(descriptor)
 
 
 def _should_keep_response(config: dict[str, Any], sample: dict[str, Any]) -> bool:
@@ -191,7 +212,7 @@ def custom_prompt_profile(prompt: dict[str, Any]) -> dict[str, Any]:
 
 
 def select_test_profiles(config: dict[str, Any], selector: str) -> list[dict[str, Any]]:
-    requested = [item.strip() for item in selector.split(",") if item.strip()]
+    requested = normalize_profile_selector(selector).split(",")
     builtins_all = select_profiles("all")
     builtin_names = [profile["name"] for profile in builtins_all]
     custom_profiles = {
@@ -343,7 +364,7 @@ def _run_profiles(
         for _ in range(warmups):
             warmup_samples.append(client.run(profile["cases"][0]["prompt"], options))
 
-        if profile["name"] == "load":
+        if "concurrency_levels" in profile:
             samples = []
             by_concurrency = []
             for level in profile["concurrency_levels"]:
@@ -408,7 +429,7 @@ def _sample_cost(sample: dict[str, Any], model: dict[str, Any]) -> float | None:
 def _profile_request_count(profiles: list[dict[str, Any]], repetitions: int) -> int:
     return sum(
         sum(max(repetitions, level) for level in profile["concurrency_levels"])
-        if profile["name"] == "load"
+        if "concurrency_levels" in profile
         else len(profile["cases"]) * repetitions
         for profile in profiles
     )
@@ -419,7 +440,7 @@ def profile_request_breakdown(
 ) -> list[dict[str, Any]]:
     breakdown = []
     for profile in profiles:
-        if profile["name"] == "load":
+        if "concurrency_levels" in profile:
             levels = [
                 (level, max(repetitions, level))
                 for level in profile["concurrency_levels"]

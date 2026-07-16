@@ -24,6 +24,20 @@ def apply_smoke_mode(config: dict[str, Any]) -> dict[str, Any]:
     return updated
 
 
+def apply_migration_check(config: dict[str, Any]) -> dict[str, Any]:
+    """Configure one cheap, comparable response-contract preflight."""
+    updated = copy.deepcopy(config)
+    updated["profiles"] = "quick-migration-check"
+    updated["suite_repetitions"] = 1
+    updated["warmups"] = 0
+    updated["concurrency"] = 1
+    name = updated.get("name", "llm-benchmark")
+    updated["name"] = (
+        name if name.endswith("-migration-check") else f"{name}-migration-check"
+    )
+    return updated
+
+
 def apply_environment(config: dict[str, Any], name: str | None) -> dict[str, Any]:
     if not name:
         return config

@@ -6,36 +6,52 @@ from llm_bench.profiles import evaluate_response, select_profiles
 def test_all_selects_every_supported_profile_except_coding():
     profiles = select_profiles("all")
     assert [profile["name"] for profile in profiles] == [
-        "chat-fast",
-        "classification",
-        "structured-extraction",
-        "reasoning",
-        "load",
+        "quick-migration-check",
+        "exact-routing-check",
+        "structured-output-check",
+        "numeric-instruction-check",
+        "concurrency-health-check",
     ]
 
 
-def test_profile_list_can_select_a_mixed_subset():
+def test_profile_list_accepts_legacy_names_and_returns_clear_canonical_names():
     profiles = select_profiles("chat-fast,reasoning")
     assert [profile["name"] for profile in profiles] == [
-        "chat-fast",
-        "reasoning",
+        "quick-migration-check",
+        "numeric-instruction-check",
     ]
+
+
+def test_quick_migration_check_is_described_by_user_value():
+    profile = select_profiles("quick-migration-check")[0]
+
+    assert "API compatibility" in profile["description"]
+    assert "TTFT" in profile["description"]
 
 
 def test_structured_extraction_defines_labels_and_has_room_for_reasoning():
-    profile = select_profiles("structured-extraction")[0]
+    profile = select_profiles("structured-output-check")[0]
     ticket = next(case for case in profile["cases"] if case["id"] == "extract-ticket")
     assert "high, medium, or low" in ticket["prompt"]
     assert profile["request"]["max_output_tokens"] >= 512
 
 
 def test_reasoning_prompts_request_numeric_only_answers():
-    profile = select_profiles("reasoning")[0]
+    profile = select_profiles("numeric-instruction-check")[0]
 
     for case in profile["cases"]:
         assert "Return only the numeric answer" in case["prompt"]
         assert "Do not include units" in case["prompt"]
         assert "explanation" in case["prompt"]
+
+
+def test_numeric_answer_evaluator_accepts_a_correct_explained_answer():
+    result = evaluate_response(
+        "The new price is 100.",
+        {"type": "numeric_answer", "expected": 100, "tolerance": 0},
+    )
+
+    assert result["valid"] is True
 
 
 @pytest.mark.parametrize(

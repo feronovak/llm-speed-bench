@@ -1,0 +1,26 @@
+{
+  "name": "content-rule-contract",
+  "profiles": "content-rule",
+  "suite_repetitions": 1,
+  "warmups": 0,
+  "request": {
+    "temperature": 0,
+    "max_output_tokens": 80
+  },
+  "models": [
+    {
+      "name": "local-example",
+      "provider": "mock",
+      "model": "local",
+      "response": "Your refund was processed."
+    }
+  ],
+  "prompts": [
+    {
+      "name": "content-rule",
+      "description": "Ensure a required customer-facing term is retained.",
+      "prompt": "Confirm that a customer's refund was processed in one sentence.",
+      "validation": {"contains": "refund"}
+    }
+  ]
+}

@@ -12,6 +12,74 @@ from .pricing import apply_public_pricing
 from .security import require_http_url
 
 
+_MAX_CATALOG_RESPONSE_BYTES = 8 * 1024 * 1024
+
+_NON_CHAT_NAME_TYPES = {
+    "realtime": "realtime",
+    "transcribe": "audio",
+    "tts": "audio",
+    "audio": "audio",
+    "image": "image",
+    "video": "video",
+    "embed": "embedding",
+    "computer-use": "agent",
+    "robotics": "agent",
+    "multi-agent": "agent",
+    "omni": "media",
+}
+
+
+def classify_catalog_model(model: dict[str, Any]) -> dict[str, Any]:
+    """Attach a conservative benchmark category without guessing chat support."""
+    classified = dict(model)
+    if classified.get("catalog_type"):
+        classified.setdefault("catalog_confidence", "manual")
+        return classified
+    capabilities = classified.get("capabilities") or {}
+    name = str(classified.get("model", "")).casefold()
+    output = {
+        str(item).casefold() for item in capabilities.get("output_modalities") or []
+    }
+    named_type = next(
+        (kind for term, kind in _NON_CHAT_NAME_TYPES.items() if term in name), None
+    )
+    if named_type and not output:
+        classified["catalog_type"] = named_type
+        classified["catalog_confidence"] = "heuristic"
+        return classified
+    if capabilities.get("text_generation") == "ready":
+        classified["catalog_type"] = "text-ready"
+        classified["catalog_confidence"] = "official"
+        return classified
+    if capabilities.get("text_generation") == "candidate":
+        classified["catalog_type"] = "text-candidate"
+        classified["catalog_confidence"] = "official"
+        return classified
+    if output:
+        if "text" in output:
+            catalog_type = "text-chat"
+        elif "image" in output:
+            catalog_type = "image"
+        elif "audio" in output:
+            catalog_type = "audio"
+        elif "video" in output:
+            catalog_type = "video"
+        elif "embeddings" in output or "embedding" in output:
+            catalog_type = "embedding"
+        else:
+            catalog_type = "unknown"
+        confidence = "official"
+    else:
+        catalog_type = next(
+            (kind for term, kind in _NON_CHAT_NAME_TYPES.items() if term in name),
+            "unknown",
+        )
+        confidence = "heuristic" if catalog_type != "unknown" else "unknown"
+    classified["catalog_type"] = catalog_type
+    classified["catalog_confidence"] = confidence
+    return classified
+
+
 def _get_json(
     url: str, key_env: str | None, headers: dict[str, str] | None = None
 ) -> dict[str, Any]:
@@ -24,7 +92,10 @@ def _get_json(
         request_headers.setdefault("Authorization", f"Bearer {key}")
     request = urllib.request.Request(url, headers=request_headers)
     with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310
-        return json.load(response)
+        body = response.read(_MAX_CATALOG_RESPONSE_BYTES + 1)
+    if len(body) > _MAX_CATALOG_RESPONSE_BYTES:
+        raise ValueError("catalog response exceeded the 8 MiB safety limit")
+    return json.loads(body)
 
 
 def _base(source: dict[str, Any]) -> dict[str, Any]:
@@ -46,11 +117,27 @@ def _openai(source: dict[str, Any]) -> list[dict[str, Any]]:
             "model": item["id"],
             "created": item.get("created"),
             "owned_by": item.get("owned_by"),
-            "capabilities": {"reasoning": None},
+            "capabilities": {
+                "reasoning": None,
+                **_openai_capabilities(item["id"]),
+            },
+            "capability_evidence": [{"source": "official-id", "confidence": "low"}],
             "catalog_metadata": item,
         }
         for item in payload.get("data", [])
     ]
+
+
+def _openai_capabilities(model_id: str) -> dict[str, Any]:
+    name = model_id.casefold()
+    if name.startswith("gpt-") and not any(
+        term in name for term in ("realtime", "audio", "image", "transcribe", "tts")
+    ):
+        return {
+            "text_generation": "candidate",
+            "adapter": "openai_responses",
+        }
+    return {}
 
 
 def _anthropic(source: dict[str, Any]) -> list[dict[str, Any]]:
@@ -71,7 +158,13 @@ def _anthropic(source: dict[str, Any]) -> list[dict[str, Any]]:
             "provider": "anthropic",
             "model": item["id"],
             "created": item.get("created_at"),
-            "capabilities": {"reasoning": None},
+            "capabilities": {
+                **(item.get("capabilities") or {}),
+                "reasoning": (item.get("capabilities") or {}).get("thinking"),
+                "text_generation": "ready",
+                "adapter": "anthropic_messages",
+            },
+            "capability_evidence": [{"source": "official", "confidence": "high"}],
             "catalog_metadata": item,
         }
         for item in payload.get("data", [])
@@ -103,7 +196,12 @@ def _gemini(source: dict[str, Any]) -> list[dict[str, Any]]:
                 "capabilities": {
                     "reasoning": item.get("thinking"),
                     "methods": methods,
+                    "temperature": item.get("temperature") is not None,
+                    "max_temperature": item.get("maxTemperature"),
+                    "text_generation": "candidate",
+                    "adapter": "gemini_generate_content",
                 },
+                "capability_evidence": [{"source": "official", "confidence": "high"}],
                 "catalog_metadata": item,
             }
         )
@@ -139,14 +237,66 @@ def _openrouter(source: dict[str, Any]) -> list[dict[str, Any]]:
                 "input_modalities": architecture.get("input_modalities"),
                 "output_modalities": architecture.get("output_modalities"),
                 "supported_parameters": parameters,
+                "temperature": "temperature" in parameters,
+                "text_generation": "ready"
+                if "text" in (architecture.get("output_modalities") or [])
+                else None,
+                "adapter": "openrouter_chat",
             },
+            "capability_evidence": [{"source": "aggregator", "confidence": "high"}],
             "catalog_metadata": item,
         }
         if prompt_price is not None:
             model["input_cost_per_million"] = prompt_price * 1_000_000
         if completion_price is not None:
             model["output_cost_per_million"] = completion_price * 1_000_000
+        if prompt_price is not None and completion_price is not None:
+            model["pricing_metadata"] = {
+                "source": "openrouter routed",
+                "confidence": "authoritative",
+            }
         result.append(model)
+    return result
+
+
+def _xai(source: dict[str, Any]) -> list[dict[str, Any]]:
+    config = _base(source)
+    result = []
+    for endpoint, output_type in (
+        ("language-models", None),
+        ("image-generation-models", "image"),
+        ("video-generation-models", "video"),
+    ):
+        payload = _get_json(
+            config["base_url"].rstrip("/") + f"/{endpoint}",
+            config.get("api_key_env"),
+            config.get("headers"),
+        )
+        for item in payload.get("models", []):
+            result.append(
+                {
+                    "name": item["id"],
+                    "provider": "xai",
+                    "model": item["id"],
+                    "created": item.get("created"),
+                    "capabilities": {
+                        "input_modalities": item.get("input_modalities"),
+                        "output_modalities": item.get("output_modalities")
+                        or ([output_type] if output_type else None),
+                        "fingerprint": item.get("fingerprint"),
+                        "aliases": item.get("aliases", []),
+                        "text_generation": "ready"
+                        if "text" in (item.get("output_modalities") or [])
+                        and not output_type
+                        else None,
+                        "adapter": "xai_chat",
+                    },
+                    "capability_evidence": [
+                        {"source": "official", "confidence": "high"}
+                    ],
+                    "catalog_metadata": item,
+                }
+            )
     return result
 
 
@@ -160,7 +310,7 @@ def _number(value: Any) -> float | None:
 DISCOVERERS = {
     "openai": _openai,
     "openai_compatible": _openai,
-    "xai": _openai,
+    "xai": _xai,
     "anthropic": _anthropic,
     "gemini": _gemini,
     "openrouter": _openrouter,
@@ -195,7 +345,7 @@ def discover_models(source: dict[str, Any]) -> list[dict[str, Any]]:
         if key in source
     }
     return [
-        apply_public_pricing({**model, **inherited})
+        apply_public_pricing(classify_catalog_model({**model, **inherited}))
         for model in models[: int(source["limit"])]
     ]
 
@@ -210,5 +360,61 @@ def resolve_models(config: dict[str, Any]) -> list[dict[str, Any]]:
         identity = (model.get("provider", "openai_compatible"), model["model"])
         if identity not in seen:
             seen.add(identity)
-            unique.append(apply_public_pricing(model))
-    return unique
+            unique.append(apply_public_pricing(classify_catalog_model(model)))
+    return _enrich_from_openrouter(unique)
+
+
+def _enrich_from_openrouter(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Use OpenRouter modality metadata as labelled enrichment for direct models."""
+    aliases = {"xai": "x-ai", "gemini": "google"}
+    router_models = {
+        tuple(str(item["model"]).split("/", 1)): item
+        for item in models
+        if item.get("provider") == "openrouter" and "/" in str(item["model"])
+    }
+    normalized_router_models = {
+        (author, _normalized_model_id(model_id)): item
+        for (author, model_id), item in router_models.items()
+    }
+    enriched = []
+    for model in models:
+        provider = model.get("provider", "openai_compatible")
+        author = aliases.get(provider, provider)
+        candidate = router_models.get((author, str(model["model"])))
+        match_source = "openrouter-exact"
+        if candidate is None:
+            candidate = normalized_router_models.get(
+                (author, _normalized_model_id(str(model["model"])))
+            )
+            match_source = "openrouter-normalized"
+        if provider == "openrouter" or candidate is None:
+            enriched.append(model)
+            continue
+        router_capabilities = candidate.get("capabilities") or {}
+        if not router_capabilities.get("output_modalities"):
+            enriched.append(model)
+            continue
+        merged = dict(model)
+        merged["capabilities"] = {
+            **(model.get("capabilities") or {}),
+            **{
+                key: value
+                for key, value in router_capabilities.items()
+                if value is not None
+            },
+        }
+        merged = classify_catalog_model(
+            {key: value for key, value in merged.items() if key != "catalog_type"}
+        )
+        merged["catalog_confidence"] = "aggregator"
+        merged["capability_evidence"] = [
+            *(model.get("capability_evidence") or []),
+            {"source": match_source, "confidence": "medium"},
+        ]
+        enriched.append(merged)
+    return enriched
+
+
+def _normalized_model_id(model_id: str) -> str:
+    """Normalize provider spelling variants without fuzzy family matching."""
+    return re.sub(r"(?<=\d)[.-](?=\d)", "", model_id.casefold())

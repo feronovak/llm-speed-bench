@@ -1,10 +1,12 @@
 # LLM Speed Bench
 
-Smoke-test live LLM models before putting them in production: run your prompts
-across providers and compare validity, latency, tokens, and estimated cost.
+Know whether a model change is safe before it reaches production. LLM Speed
+Bench runs a small local preflight across providers and compares validated
+output, response speed, tokens, and estimated cost.
 
-It is a local preflight tool, not a hosted eval platform, tracing system, RAG
-framework, or public leaderboard.
+It is a local preflight tool—not a hosted evaluation platform, tracing system,
+RAG framework, or public leaderboard. Its results are evidence for your
+account, network, prompts, and validation rules.
 
 > [!WARNING]
 > Live benchmarks make paid API requests. Start with the no-key demo, preview
@@ -65,7 +67,66 @@ python3 -m pip install llm-speed-bench
 llm-bench --init
 ```
 
-## Core workflows
+Run `--doctor` and `--dry-run` before the final command. They make no generation
+requests; the final command is the paid work.
+
+## Change a model safely
+
+This is the core workflow. Put your approved model and candidate model in one
+config, then run the small response-and-contract preflight:
+
+```bash
+llm-bench benchmark.json --migration-check --dry-run
+llm-bench benchmark.json --migration-check
+```
+
+It sends three short representative cases to each selected model, once each.
+It answers: did the API work, did each response meet the basic contract, and
+how quickly did the provider start and finish responding? It is a cheap
+compatibility check, not a statistical performance conclusion.
+
+When that passes, run the task-specific checks that match your application—for
+example `exact-routing-check` or `structured-output-check`—before approving a
+switch.
+Use [custom contract tests](docs/custom-tests.md) to express the outputs your
+own feature must preserve.
+
+## Choose your path
+
+**I am new and want to see the tool safely.** Start with the
+[Getting started guide](docs/getting-started.md). It uses a no-key local mock
+before any provider request.
+
+**I know the current and candidate model IDs.** Edit one config, run the
+[migration check](#change-a-model-safely), then add a
+[custom contract test](docs/custom-tests.md) for the output your feature must
+preserve. You do not need the catalogue.
+
+**I want to find and review provider releases.** Use the local catalogue
+lifecycle below. It keeps broad provider metadata separate from the small set
+of models you approve for ongoing testing.
+
+```bash
+llm-bench catalog init
+llm-bench catalog refresh benchmarks/watch.json
+# If a model is shown as “Needs one probe”, review and confirm a minimal request:
+llm-bench catalog probe benchmarks/watch.json
+llm-bench catalog prepare benchmarks/watch.json \
+  --against benchmarks/approved.json --output benchmarks/candidates.json
+llm-bench benchmarks/candidates.json --interactive \
+  --approve-to benchmarks/approved.json
+```
+
+Refresh reads metadata only. A probe sends one minimal request only for text
+candidates you select and confirm. The interactive benchmark then lets you
+approve passing models explicitly. Follow the complete
+[catalogue tutorial](docs/model-watch.md) for the decision points.
+
+**I am automating an established contract.** Use
+[CI and JSON output](docs/ci.md), with a saved baseline and `--ci` where a
+regression should fail the pipeline.
+
+## Useful commands once you know your path
 
 ```bash
 # Inspect configuration, credentials, and model selection without generation.
@@ -76,17 +137,15 @@ llm-bench benchmark.json --pricing-check
 # Run a reduced live benchmark.
 llm-bench benchmark.json --smoke
 
-# Test discovered provider models without sending generation requests first.
-llm-bench benchmark.auto.example.json --catalog
-
 # Run a single ad hoc prompt.
 llm-bench --quick "Return only valid JSON with a status field." \
   --models openai:gpt-5.4-mini
 ```
 
-For discovery, interactive runs, CI, baselines, replay, and stop modes, see
-[workflows](docs/workflows.md). For models, environment files, custom prompts,
-and provider-specific options, see [configuration](docs/configuration.md).
+For advanced discovery, interactive runs, CI, baselines, replay, and stop
+modes, see [workflows](docs/workflows.md). For models, environment files,
+custom prompts, and provider-specific options, see
+[configuration](docs/configuration.md).
 
 ## What makes a comparison useful
 
@@ -102,18 +161,24 @@ Recommendations only consider models that pass every selected test.
 
 ## Documentation
 
-- [Getting started](docs/getting-started.md) — mock demo, first paid run, and
-  result artifacts.
+- [Getting started](docs/getting-started.md) — safe demo, first paid run, and
+  choosing the right workflow.
 - [Workflows](docs/workflows.md) — discovery, smoke mode, CI, replay, matrix,
   baselines, and request safety.
 - [Configuration](docs/configuration.md) — providers, custom prompts, presets,
   aliases, and environment overlays.
+- [Custom contract tests](docs/custom-tests.md) — copyable JSON extraction,
+  exact-routing, and content-rule migration tests.
 - [CLI reference](docs/cli-reference.md) — every command-line option, default,
   and incompatibility.
 - [Interactive mode](docs/interactive.md) — selection, paid-run preview, and
   live progress.
 - [CI and JSON output](docs/ci.md) — machine-readable output and exit-code
   gates.
+- [Model watch and approval](docs/model-watch.md) — discover, compare, and
+  deliberately promote, re-test, and retire provider models.
+- [Troubleshooting](docs/troubleshooting.md) — installation, credentials,
+  catalogue, and benchmark-result recovery.
 - [Tests, pricing, and safety](docs/tests-pricing-safety.md) — built-in tests,
   validators, pricing confidence, retries, and sensitive data.
 - [Contributing](CONTRIBUTING.md) — development setup and the TDD workflow.

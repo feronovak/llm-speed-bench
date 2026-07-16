@@ -15,6 +15,12 @@ Use `--dry-run --json` to inspect the exact paid-work plan in CI without making
 requests. `--doctor --json`, `--pricing-check`, and `--catalog` are also safe
 preflight steps.
 
+Keep catalogue discovery separate from the benchmark gate. `catalog refresh`
+fetches provider metadata and can be scheduled as an informational job, but
+`catalog probe` deliberately sends a billable request and is best reviewed by a
+person before it changes local compatibility evidence. CI should benchmark only
+reviewed models in a known configuration or approved-test plan.
+
 ## Baseline gate
 
 Keep a reviewed baseline result, write the current run to a file, then compare

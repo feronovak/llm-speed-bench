@@ -37,7 +37,7 @@ def test_interactive_selection_accepts_providers_families_profiles_and_repetitio
     assert config["discovery"] == []
     assert config["repetitions"] == 2
     assert config["suite_repetitions"] == 2
-    assert profiles == "chat-fast,reasoning"
+    assert profiles == "quick-migration-check,numeric-instruction-check"
 
 
 def test_interactive_selection_can_cancel(monkeypatch):
@@ -54,6 +54,26 @@ def test_interactive_selection_can_cancel(monkeypatch):
     )
 
     assert selected is None
+
+
+def test_interactive_all_selects_functional_tests_but_not_load(monkeypatch):
+    models = [{"provider": "mock", "model": "local", "response": "ok"}]
+    monkeypatch.setattr("llm_bench.cli.resolve_models", lambda config: models)
+    answers = iter(["all", "all", "", "4", "n"])
+    output = []
+
+    selected = interactive_selection(
+        {"prompt": "test", "models": models},
+        input_fn=lambda prompt: next(answers),
+        output_fn=output.append,
+    )
+
+    assert selected is None
+    assert any(
+        "Tests: quick-migration-check,exact-routing-check,structured-output-check,numeric-instruction-check"
+        in line
+        for line in output
+    )
 
 
 def test_interactive_selection_clears_screen_at_start(monkeypatch):
@@ -164,7 +184,7 @@ def test_interactive_selection_numbers_custom_prompts_after_builtin_profiles(
     )
 
     config, profiles = selected
-    assert profiles == "chat-fast,csv-review,source-to-quiz"
+    assert profiles == "quick-migration-check,csv-review,source-to-quiz"
     assert config["repetitions"] == 1
     assert any("6. csv-review" in line for line in output)
     assert any("7. source-to-quiz" in line for line in output)
@@ -302,6 +322,59 @@ def test_help_describes_smoke_as_a_reduced_run(monkeypatch, capsys):
     assert "no warmups" in output
 
 
+def test_migration_check_dry_run_uses_fast_response_contract(
+    monkeypatch, tmp_path, capsys
+):
+    config_path = tmp_path / "benchmark.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "name": "candidate-review",
+                "prompt": "ignored by the migration check",
+                "models": [{"provider": "mock", "model": "local", "response": "ok"}],
+                "suite_repetitions": 4,
+                "warmups": 2,
+            }
+        )
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["llm-bench", str(config_path), "--migration-check", "--dry-run", "--json"],
+    )
+
+    cli.main()
+
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["benchmark"] == "candidate-review-migration-check"
+    assert plan["tests"] == ["quick-migration-check"]
+    assert plan["requests"] == 3
+
+
+def test_migration_check_requires_a_benchmark_configuration(monkeypatch, capsys):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "--quick",
+            "Reply with ok.",
+            "--models",
+            "mock:local",
+            "--migration-check",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 2
+    assert (
+        "--migration-check requires a benchmark configuration"
+        in capsys.readouterr().err
+    )
+
+
 def test_main_init_creates_a_no_key_mock_benchmark(monkeypatch, tmp_path, capsys):
     config_path = tmp_path / "first-benchmark.json"
     monkeypatch.setattr(sys, "argv", ["llm-bench", "--init", str(config_path)])
@@ -384,7 +457,7 @@ def test_interactive_selection_shows_request_and_cost_estimate(monkeypatch):
     assert any("$0.000044" in line for line in output)
 
 
-def test_interactive_selection_explains_all_tests_request_breakdown(monkeypatch):
+def test_interactive_selection_explains_functional_tests_request_breakdown(monkeypatch):
     monkeypatch.setattr(
         "llm_bench.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
@@ -398,15 +471,11 @@ def test_interactive_selection_explains_all_tests_request_breakdown(monkeypatch)
         output_fn=output.append,
     )
 
-    assert any("chat-fast: 3" in line for line in output)
-    assert any("load: 16" in line and "c1=1, c5=5, c10=10" in line for line in output)
-    assert any("28 nominal requests, up to 56 with retries" in line for line in output)
+    assert any("quick-migration-check: 3" in line for line in output)
+    assert not any("concurrency-health-check:" in line for line in output)
+    assert any("12 nominal requests, up to 24 with retries" in line for line in output)
     breakdown_index = output.index("Request breakdown per model:")
-    load_index = next(
-        index for index, line in enumerate(output) if line.startswith("  load:")
-    )
     assert output[breakdown_index - 1] == ""
-    assert output[load_index + 1] == ""
 
 
 def test_interactive_selection_shows_colored_run_plan_and_status_meaning(monkeypatch):
@@ -626,6 +695,590 @@ def test_main_catalog_prints_safe_json(monkeypatch, tmp_path, capsys):
     assert output == [{"model": "fake"}]
 
 
+def test_watch_new_initializes_then_reports_new_models(monkeypatch, tmp_path, capsys):
+    config = tmp_path / "watch.json"
+    config.write_text('{"prompt":"hello","models":[{"model":"old"}]}')
+    snapshot = tmp_path / "snapshot.json"
+    monkeypatch.setattr(
+        cli,
+        "resolve_models",
+        lambda value: [{"provider": "openai", "model": "old"}],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["llm-bench", "watch-new", str(config), "--snapshot", str(snapshot), "--json"],
+    )
+    cli.main()
+    assert json.loads(capsys.readouterr().out)["initialized"] is True
+
+    monkeypatch.setattr(
+        cli,
+        "resolve_models",
+        lambda value: [
+            {"provider": "openai", "model": "old"},
+            {"provider": "openai", "model": "new"},
+        ],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["llm-bench", "watch-new", str(config), "--snapshot", str(snapshot), "--json"],
+    )
+    cli.main()
+    assert json.loads(capsys.readouterr().out)["diff"]["added"][0]["model"] == "new"
+
+
+def test_catalog_refresh_uses_the_catalog_command_family(monkeypatch, tmp_path, capsys):
+    config = tmp_path / "watch.json"
+    config.write_text('{"prompt":"hello","models":[{"model":"old"}]}')
+    monkeypatch.setattr(
+        cli, "resolve_models", lambda value: [{"provider": "openai", "model": "old"}]
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["llm-bench", "catalog", "refresh", str(config), "--json"]
+    )
+
+    cli.main()
+
+    assert json.loads(capsys.readouterr().out)["initialized"] is True
+
+
+def test_catalog_init_creates_a_ready_local_workspace(monkeypatch, tmp_path):
+    workspace = tmp_path / "benchmarks"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "catalog",
+            "init",
+            str(workspace),
+            "--providers",
+            "openai,anthropic",
+        ],
+    )
+
+    cli.main()
+
+    watch = json.loads((workspace / "watch.json").read_text())
+    assert [item["provider"] for item in watch["discovery"]] == ["openai", "anthropic"]
+    assert json.loads((workspace / "approved.json").read_text()) == {
+        "models": [],
+        "approvals": [],
+    }
+    assert (workspace / ".env.production").read_text() == Path(
+        ".env.example"
+    ).read_text()
+
+
+def test_catalog_init_guides_new_users_to_all_providers_by_default(
+    monkeypatch, tmp_path
+):
+    workspace = tmp_path / "benchmarks"
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    monkeypatch.setattr(sys, "argv", ["llm-bench", "catalog", "init", str(workspace)])
+
+    cli.main()
+
+    watch = json.loads((workspace / "watch.json").read_text())
+    assert [item["provider"] for item in watch["discovery"]] == [
+        "openai",
+        "anthropic",
+        "gemini",
+        "xai",
+        "openrouter",
+    ]
+
+
+def test_catalog_init_checks_an_existing_workspace_before_provider_setup(
+    monkeypatch, tmp_path, capsys
+):
+    workspace = tmp_path / "benchmarks"
+    workspace.mkdir()
+    (workspace / "watch.json").write_text('{"name":"keep"}\n')
+    answers = iter([""])
+    prompts = []
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt: prompts.append(prompt) or next(answers)
+    )
+    monkeypatch.setattr(sys, "argv", ["llm-bench", "catalog", "init", str(workspace)])
+
+    cli.main()
+
+    assert prompts == [
+        "A catalog workspace already exists. Rewrite watch settings and keep approved models, keys, and results? [y/N]: "
+    ]
+    assert json.loads((workspace / "watch.json").read_text()) == {"name": "keep"}
+    assert "Kept existing catalog workspace" in capsys.readouterr().out
+
+
+def test_catalog_init_reuses_an_existing_parent_env_file(monkeypatch, tmp_path):
+    parent_env = tmp_path / ".env.production"
+    parent_env.write_text('OPENAI_API_KEY="existing-key"\n')
+    workspace = tmp_path / "benchmarks"
+    monkeypatch.setattr("builtins.input", lambda prompt: "openai")
+    monkeypatch.setattr(sys, "argv", ["llm-bench", "catalog", "init", str(workspace)])
+
+    cli.main()
+
+    workspace_env = workspace / ".env.production"
+    assert workspace_env.is_symlink()
+    assert workspace_env.resolve() == parent_env
+    assert workspace_env.read_text() == parent_env.read_text()
+
+
+def test_catalog_prepare_always_selects_unapproved_models(monkeypatch, tmp_path):
+    forwarded = []
+    monkeypatch.setattr(cli, "_watch_new_main", forwarded.append)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "catalog",
+            "prepare",
+            str(tmp_path / "watch.json"),
+            "--against",
+            str(tmp_path / "approved.json"),
+            "--output",
+            str(tmp_path / "candidates.json"),
+        ],
+    )
+
+    cli.main()
+
+    assert "--all-unapproved" in forwarded[0]
+
+
+def test_catalog_test_writes_a_runnable_plan_for_approved_models(monkeypatch, tmp_path):
+    watch = tmp_path / "watch.json"
+    watch.write_text('{"prompt":"ok","discovery":[{"provider":"openai","limit":1}]}')
+    approved = tmp_path / "approved.json"
+    approved.write_text('{"models":[{"provider":"openai","model":"gpt-5.6-luna"}]}')
+    output = tmp_path / "approved-tests.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "catalog",
+            "test",
+            str(watch),
+            "--approved",
+            str(approved),
+            "--output",
+            str(output),
+        ],
+    )
+
+    cli.main()
+
+    plan = json.loads(output.read_text())
+    assert plan["prompt"] == "ok"
+    assert plan["models"] == [{"provider": "openai", "model": "gpt-5.6-luna"}]
+    assert plan["discovery"] == []
+
+
+def test_catalog_refresh_lists_all_missing_provider_keys_before_discovery(
+    monkeypatch, tmp_path, capsys
+):
+    watch = tmp_path / "watch.json"
+    watch.write_text(
+        json.dumps(
+            {
+                "prompt": "ok",
+                "discovery": [
+                    {"provider": "openai", "limit": 1},
+                    {"provider": "anthropic", "limit": 1},
+                ],
+            }
+        )
+    )
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(
+        cli,
+        "resolve_models",
+        lambda config: (_ for _ in ()).throw(AssertionError("must not discover")),
+    )
+    monkeypatch.setattr(sys, "argv", ["llm-bench", "catalog", "refresh", str(watch)])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 2
+    error = capsys.readouterr().err
+    assert "OPENAI_API_KEY" in error
+    assert "ANTHROPIC_API_KEY" in error
+    assert str(tmp_path / ".env.production") in error
+
+
+def test_catalog_candidate_selection_groups_before_listing_models():
+    answers = iter(["1", "1"])
+    output = []
+
+    selected = cli.interactive_catalog_candidate_selection(
+        [
+            {
+                "provider": "openai",
+                "model": "gpt-5.6-luna",
+                "catalog_type": "text-ready",
+            },
+            {
+                "provider": "openai",
+                "model": "gpt-realtime-2",
+                "catalog_type": "realtime",
+            },
+            {
+                "provider": "anthropic",
+                "model": "claude-sonnet-5",
+                "catalog_type": "unknown",
+            },
+        ],
+        input_fn=lambda prompt: next(answers),
+        output_fn=output.append,
+    )
+
+    assert selected == [
+        {"provider": "openai", "model": "gpt-5.6-luna", "catalog_type": "text-ready"}
+    ]
+    assert "=== Choose a provider ===" in output
+    assert any("openai — 1 text-generation model" in line for line in output)
+    assert "gpt-realtime-2" not in "\n".join(output)
+
+
+def test_watch_new_writes_a_regular_candidate_benchmark_config(monkeypatch, tmp_path):
+    watch = tmp_path / "watch.json"
+    watch.write_text('{"prompt":"hello","models":[{"model":"old"}]}')
+    approved = tmp_path / "approved.json"
+    approved.write_text('{"models":[{"provider":"openai","model":"old"}]}')
+    snapshot = tmp_path / "snapshot.json"
+    output = tmp_path / "candidates.json"
+    snapshot.write_text(
+        json.dumps({"models": [{"provider": "openai", "model": "old"}]})
+    )
+    monkeypatch.setattr(
+        cli,
+        "resolve_models",
+        lambda value: [
+            {"provider": "openai", "model": "old"},
+            {"provider": "openai", "model": "new"},
+        ],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "watch-new",
+            str(watch),
+            "--snapshot",
+            str(snapshot),
+            "--against",
+            str(approved),
+            "--write-config",
+            str(output),
+        ],
+    )
+
+    cli.main()
+
+    assert json.loads(output.read_text())["models"] == [
+        {"provider": "openai", "model": "new"},
+    ]
+
+
+def test_watch_new_can_write_all_currently_unapproved_models(monkeypatch, tmp_path):
+    watch = tmp_path / "watch.json"
+    watch.write_text('{"prompt":"hello","models":[{"model":"old"}]}')
+    approved = tmp_path / "approved.json"
+    approved.write_text('{"models":[{"provider":"openai","model":"old"}]}')
+    output = tmp_path / "candidates.json"
+    monkeypatch.setattr(
+        cli,
+        "resolve_models",
+        lambda value: [
+            {"provider": "openai", "model": "old"},
+            {"provider": "openai", "model": "already-discovered"},
+        ],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "watch-new",
+            str(watch),
+            "--against",
+            str(approved),
+            "--all-unapproved",
+            "--write-config",
+            str(output),
+        ],
+    )
+
+    cli.main()
+
+    assert json.loads(output.read_text())["models"] == [
+        {"provider": "openai", "model": "already-discovered"}
+    ]
+
+
+def test_watch_new_reports_existing_output_as_a_cli_error(
+    monkeypatch, tmp_path, capsys
+):
+    output = tmp_path / "candidates.json"
+    output.write_text("{}")
+    monkeypatch.setattr(
+        cli,
+        "_watch_new_main",
+        lambda argv: (_ for _ in ()).throw(
+            ValueError(f"{output} already exists; refusing to overwrite it")
+        ),
+    )
+    monkeypatch.setattr(sys, "argv", ["llm-bench", "watch-new", "watch.json"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 2
+    assert f"llm-bench: error: {output} already exists" in capsys.readouterr().err
+
+
+def test_interactive_watch_reviews_unapproved_models_on_first_snapshot(
+    monkeypatch, tmp_path, capsys
+):
+    config = tmp_path / "watch.json"
+    config.write_text('{"prompt":"hello","models":[{"model":"old"}]}')
+    approved = tmp_path / "approved.json"
+    approved.write_text(
+        json.dumps({"models": [{"provider": "openai", "model": "old"}]})
+    )
+    snapshot = tmp_path / "snapshot.json"
+    monkeypatch.setattr(
+        cli,
+        "resolve_models",
+        lambda value: [
+            {"provider": "openai", "model": "old"},
+            {"provider": "openai", "model": "new"},
+        ],
+    )
+    selected = []
+    monkeypatch.setattr(
+        cli,
+        "interactive_selection",
+        lambda config, **kwargs: selected.append(config) or None,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "watch-new",
+            str(config),
+            "--snapshot",
+            str(snapshot),
+            "--interactive",
+            "--against",
+            str(approved),
+        ],
+    )
+
+    cli.main()
+
+    assert selected == [
+        {
+            "prompt": "hello",
+            "models": [{"provider": "openai", "model": "new"}],
+            "discovery": [],
+        }
+    ]
+    assert (
+        "Catalog refreshed: 2 discovered; 1 approved; 1 available for review."
+        in capsys.readouterr().out
+    )
+
+
+def test_watch_new_interrupt_exits_cleanly(monkeypatch, tmp_path, capsys):
+    config = tmp_path / "watch.json"
+    config.write_text('{"prompt":"hello","models":[{"model":"candidate"}]}')
+    approved = tmp_path / "approved.json"
+    approved.write_text('{"models": []}')
+    monkeypatch.setattr(
+        cli,
+        "resolve_models",
+        lambda value: [{"provider": "openai", "model": "candidate"}],
+    )
+    monkeypatch.setattr(
+        cli,
+        "interactive_selection",
+        lambda *args, **kwargs: (_ for _ in ()).throw(KeyboardInterrupt),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "watch-new",
+            str(config),
+            "--interactive",
+            "--against",
+            str(approved),
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 130
+    assert "Benchmark cancelled; no artifacts saved." in capsys.readouterr().err
+
+
+def test_approve_model_records_a_passing_result(monkeypatch, tmp_path):
+    result = tmp_path / "candidate.json"
+    result.write_text(
+        json.dumps(
+            {
+                "run_id": "run-123",
+                "models": [
+                    {
+                        "provider": "openai",
+                        "model": "candidate",
+                        "name": "Candidate",
+                        "summary": {"failed": 0},
+                    }
+                ],
+            }
+        )
+    )
+    approved = tmp_path / "approved.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "approve-model",
+            "openai:candidate",
+            "--from",
+            str(result),
+            "--approved",
+            str(approved),
+        ],
+    )
+    cli.main()
+    saved = json.loads(approved.read_text())
+    assert saved["models"] == [
+        {"provider": "openai", "model": "candidate", "name": "Candidate"}
+    ]
+    assert saved["approvals"][0]["source_result"] == str(result)
+
+
+def test_models_remove_deletes_a_permanent_model_and_records_when(
+    monkeypatch, tmp_path
+):
+    approved = tmp_path / "approved.json"
+    approved.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {"provider": "openai", "model": "keep"},
+                    {"provider": "openai", "model": "remove"},
+                ],
+                "approvals": [],
+            }
+        )
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["llm-bench", "models", "remove", "openai:remove", "--approved", str(approved)],
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt: "y")
+
+    cli.main()
+
+    saved = json.loads(approved.read_text())
+    assert saved["models"] == [{"provider": "openai", "model": "keep"}]
+    assert saved["removals"][0]["model"] == "remove"
+
+
+def test_interactive_watch_selection_keeps_explicit_candidate_and_incumbent_choices():
+    answers = iter(["2", "1", "2", "y"])
+    output = []
+    selected = cli.interactive_watch_selection(
+        {"prompt": "hello"},
+        {
+            "models": [
+                {"provider": "openai", "model": "incumbent-a"},
+                {"provider": "openai", "model": "incumbent-b"},
+            ]
+        },
+        [
+            {"provider": "openai", "model": "candidate-a"},
+            {"provider": "openai", "model": "candidate-b"},
+        ],
+        input_fn=lambda prompt: next(answers),
+        output_fn=output.append,
+    )
+
+    assert selected is not None
+    config, tests, smoke = selected
+    assert config["models"] == [
+        {"provider": "openai", "model": "incumbent-a"},
+        {"provider": "openai", "model": "candidate-b"},
+    ]
+    assert tests == "exact-routing-check"
+    assert smoke is True
+    assert "=== Models to try ===" in output
+    assert "=== Your current models ===" in output
+    assert "These are not changed; they are only used for comparison." in output
+
+
+def test_interactive_budget_requires_explicit_retry_risk_confirmation():
+    output = []
+    config = {
+        "prompt": "hello",
+        "models": [{"provider": "mock", "model": "candidate"}],
+        "repetitions": 1,
+        "warmups": 0,
+        "max_requests": 1,
+    }
+    accepted = cli.confirm_interactive_budget(
+        config,
+        None,
+        input_fn=lambda prompt: "ACCEPT 2",
+        output_fn=output.append,
+        color=True,
+    )
+
+    assert accepted is True
+    assert "max_requests" not in config
+    assert "This plan has 1 normal request and may make up to 2 with retries." in output
+    assert "Your max_requests limit is 1." in "\n".join(output)
+    assert output[0] == "\x1b[1;33m=== RETRY RISK ===\x1b[0m"
+
+
+def test_interactive_budget_retries_after_an_invalid_acceptance_value():
+    answers = iter(["ACCEPT 20", "ACCEPT 2"])
+    output = []
+    accepted = cli.confirm_interactive_budget(
+        {
+            "prompt": "hello",
+            "models": [{"provider": "mock", "model": "candidate"}],
+            "repetitions": 1,
+            "warmups": 0,
+            "max_requests": 1,
+        },
+        None,
+        input_fn=lambda prompt: next(answers),
+        output_fn=output.append,
+    )
+
+    assert accepted is True
+    assert "That does not match ACCEPT 2. Try again or press Enter to cancel." in output
+
+
 def test_main_runs_benchmark_saves_and_prints_console_report(
     monkeypatch, tmp_path, capsys
 ):
@@ -745,6 +1398,34 @@ def test_main_dry_run_prints_human_readable_plan_by_default(
     assert "Requests: 5 nominal; up to 10 with 2 attempts" in output
     assert "Cost: unavailable" in output
     assert "Stop on: none" in output
+
+
+def test_dry_run_summarizes_large_model_and_pricing_lists():
+    plan = {
+        "benchmark": "catalog",
+        "models": [
+            {"provider": "openai", "model": f"gpt-{index}"} for index in range(12)
+        ],
+        "tests": ["config prompt"],
+        "requests": 12,
+        "possible_requests": 24,
+        "retry_max_attempts": 2,
+        "estimated_cost_usd": None,
+        "maximum_estimated_cost_usd": None,
+        "pricing_warnings": [
+            {"model": f"gpt-{index}", "message": "pricing is unknown"}
+            for index in range(12)
+        ],
+        "save_responses": False,
+        "stop_on": "none",
+    }
+
+    output = cli._format_dry_run_plan(plan)
+
+    assert "Models: 12 selected (openai: 12)" in output
+    assert "gpt-11" not in output
+    assert "Pricing warnings: 12 models have unknown or stale pricing." in output
+    assert "... and 2 more" in output
 
 
 def test_main_dry_run_includes_pricing_warnings(monkeypatch, tmp_path, capsys):
@@ -941,9 +1622,13 @@ def test_main_dry_run_explains_all_tests_load_expansion(monkeypatch, tmp_path, c
     cli.main()
 
     output = json.loads(capsys.readouterr().out)
-    load = next(item for item in output["test_breakdown"] if item["name"] == "load")
+    load = next(
+        item
+        for item in output["test_breakdown"]
+        if item["name"] == "concurrency-health-check"
+    )
     assert load == {
-        "name": "load",
+        "name": "concurrency-health-check",
         "requests_per_model": 16,
         "details": "load levels: c1=1, c5=5, c10=10",
     }

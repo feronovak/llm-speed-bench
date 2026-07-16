@@ -1,8 +1,10 @@
 import stat
+import sys
 
 import pytest
 
 from llm_bench.runner import (
+    benchmark_run_lock,
     console_report,
     custom_prompt_profile,
     load_config,
@@ -11,6 +13,22 @@ from llm_bench.runner import (
     save_result,
     select_custom_prompt,
 )
+
+
+def test_benchmark_run_lock_reports_existing_run(tmp_path, monkeypatch):
+    class BusyFcntl:
+        LOCK_EX = 1
+        LOCK_NB = 2
+
+        @staticmethod
+        def flock(_descriptor, _flags):
+            raise BlockingIOError
+
+    monkeypatch.setitem(sys.modules, "fcntl", BusyFcntl)
+
+    with pytest.raises(ValueError, match="already running"):
+        with benchmark_run_lock(tmp_path / "results"):
+            pass
 
 
 def test_load_config_accepts_named_prompts_without_legacy_prompt(tmp_path):
@@ -161,12 +179,12 @@ def test_profile_run_groups_quality_and_operational_metrics(monkeypatch):
         profile_selector="classification",
     )
     profile = result["models"][0]["profiles"][0]
-    assert profile["name"] == "classification"
+    assert profile["name"] == "exact-routing-check"
     assert profile["summary"]["quality_score"] == 1 / 3
     assert profile["summary"]["valid_output_rate"] == 1 / 3
     assert len(profile["samples"]) == 3
     rendered = report(result)
-    assert "| fake | classification | 33% | 100% |" in rendered
+    assert "| fake | exact-routing-check | 33% | 100% |" in rendered
 
 
 def test_run_benchmark_reports_live_model_and_request_progress(monkeypatch):
@@ -319,9 +337,9 @@ def test_load_profile_progress_includes_concurrency_level(monkeypatch):
     )
 
     phases = [event["phase"] for event in events if event["type"] == "request_complete"]
-    assert "load/load-short@c1" in phases
-    assert "load/load-short@c5" in phases
-    assert "load/load-short@c10" in phases
+    assert "concurrency-health-check/load-short@c1" in phases
+    assert "concurrency-health-check/load-short@c5" in phases
+    assert "concurrency-health-check/load-short@c10" in phases
 
 
 def test_run_benchmark_can_select_profiles_from_config(monkeypatch):
@@ -354,8 +372,8 @@ def test_run_benchmark_can_select_profiles_from_config(monkeypatch):
         }
     )
     profile_names = [profile["name"] for profile in result["models"][0]["profiles"]]
-    assert profile_names == ["classification"]
-    assert result["settings"]["profiles"] == ["classification"]
+    assert profile_names == ["exact-routing-check"]
+    assert result["settings"]["profiles"] == ["exact-routing-check"]
 
 
 def test_run_benchmark_can_mix_builtin_and_custom_prompt_profiles(monkeypatch):
@@ -397,11 +415,14 @@ def test_run_benchmark_can_mix_builtin_and_custom_prompt_profiles(monkeypatch):
 
     profiles = result["models"][0]["profiles"]
     assert [profile["name"] for profile in profiles] == [
-        "classification",
+        "exact-routing-check",
         "source-to-quiz",
     ]
     assert profiles[1]["summary"]["quality_score"] == 1
-    assert result["settings"]["profiles"] == ["classification", "source-to-quiz"]
+    assert result["settings"]["profiles"] == [
+        "exact-routing-check",
+        "source-to-quiz",
+    ]
 
 
 def test_custom_prompt_profile_presets_expand_into_request_options(monkeypatch):

@@ -2,10 +2,18 @@
 
 ## Built-in tests and validation
 
-Built-in profiles are `chat-fast`, `classification`, `structured-extraction`,
-`reasoning`, and `load`. The load profile intentionally expands work at
+Built-in packs are `quick-migration-check`, `exact-routing-check`,
+`structured-output-check`, `numeric-instruction-check`, and
+`concurrency-health-check`. The concurrency pack intentionally expands work at
 concurrency 1, 5, and 10; keep it separate from normal interactive-latency
 comparisons.
+
+Use `--migration-check` for the smallest real response check. It runs the three
+`quick-migration-check` cases once per selected model, with no warmups and
+concurrency one.
+It answers “does this candidate respond and meet a basic contract here?” before
+a model switch. It is not a reliable latency ranking; use several repetitions
+for that, and run `concurrency-health-check` separately for concurrency behaviour.
 
 Use `"profiles": "all"` for the full built-in suite or select a mixed subset
 with `--tests`. The evaluator supports exact matches, numeric answers, JSON
@@ -23,10 +31,20 @@ timeouts retry once by default. Configure `request.retry` to change attempts,
 backoff, and bounded jitter. Plans show nominal work and the retry-expanded
 cost ceiling; results record retry counts and final failure categories.
 
+A catalogue probe is different from a benchmark: it sends one minimal request
+only after explicit confirmation, to establish whether a selected text candidate
+has a usable provider adapter. It may be charged. The local capability ledger
+stores the outcome and safe request shape, not response text; a changed provider
+fingerprint expires the prior probe result.
+
 ## Pricing confidence
 
-OpenRouter pricing comes from its live catalog. Selected OpenAI, Gemini, and
-Anthropic prices are maintained in `llm_bench/pricing.py` with an `as_of` date.
+OpenRouter pricing comes from its live catalog and is labelled `openrouter
+routed` with authoritative confidence: it applies when the benchmark is routed
+through OpenRouter. Selected direct OpenAI, Gemini, Anthropic, and xAI prices
+are maintained as timestamped `official snapshot` records. Unknown prices stay
+unknown; the tool never silently treats an OpenRouter route as a direct-provider
+price.
 Explicit per-model prices override the registry. Estimated spend excludes taxes,
 account-specific discounts, cache discounts, tool fees, and similar adjustments.
 

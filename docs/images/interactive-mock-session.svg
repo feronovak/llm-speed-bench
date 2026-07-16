@@ -6,7 +6,7 @@
   <circle cx="22" cy="17" r="6" fill="#ff5f57"/><circle cx="42" cy="17" r="6" fill="#febc2e"/><circle cx="62" cy="17" r="6" fill="#28c840"/>
   <g fill="#c9d1d9" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">
     <text x="24" y="66" fill="#58a6ff">=== Models ===</text><text x="24" y="90">  1. mock: local</text><text x="24" y="114">Select models (numbers, provider, provider/family, or all): 1</text>
-    <text x="24" y="150" fill="#d2a8ff">=== Tests ===</text><text x="24" y="174">  1. chat-fast — Short interactive answers; emphasizes TTFT and latency.</text><text x="24" y="198">Select tests (numbers/names/all) or Enter for the config prompt:</text>
+    <text x="24" y="150" fill="#d2a8ff">=== Tests ===</text><text x="24" y="174">  1. quick-migration-check — API compatibility, response validity, TTFT, and latency.</text><text x="24" y="198">Select tests (numbers/names/all) or Enter for the config prompt:</text>
     <text x="24" y="234" fill="#79c0ff">=== Repetitions ===</text><text x="24" y="258">Repetitions per test [1]:</text>
     <text x="24" y="294" fill="#ff7b72">=== Stop Mode ===</text><text x="24" y="318">  1. any-fail   2. api-error   3. test-fail   4. never</text><text x="24" y="342">Stop on [1]: 4</text>
     <text x="24" y="378" fill="#3fb950">=== Run Plan ===</text><text x="24" y="402">  Models: 1 selected    Tests: config prompt    Repetitions: 1</text><text x="24" y="426">  Stop on: never    Estimate: 1 nominal request, up to 2 with retries</text><text x="24" y="450">  Saved output: False</text><text x="24" y="486" fill="#d29922">Run paid benchmark? [y/N]: n</text><text x="24" y="508" fill="#d29922">Cancelled.</text>

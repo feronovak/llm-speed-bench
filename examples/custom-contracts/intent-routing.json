@@ -1,0 +1,27 @@
+{
+  "name": "intent-routing-contract",
+  "profiles": "intent-routing",
+  "suite_repetitions": 1,
+  "warmups": 0,
+  "request": {
+    "temperature": 0,
+    "max_output_tokens": 20
+  },
+  "models": [
+    {
+      "name": "local-example",
+      "provider": "mock",
+      "model": "local",
+      "response": "billing"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "intent-routing",
+      "description": "Route a customer request to the exact downstream queue.",
+      "system_prompt": "Return only one lowercase label: billing, technical, or account.",
+      "prompt": "I was charged twice for the same subscription.",
+      "validation": {"regex": "^billing$"}
+    }
+  ]
+}

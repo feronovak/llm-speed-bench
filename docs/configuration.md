@@ -27,6 +27,11 @@ Override endpoint and authentication details with `base_url`, `api_key_env`,
 and `headers`. Use `provider_options` inside `request` only when normalized
 settings such as temperature, system prompt, and output limit are insufficient.
 
+For normal benchmarks, enter only the provider and model ID you intend to use.
+Do not copy catalogue internals such as `catalog_type`, `catalog_confidence`,
+or `adapter` into your JSON. The catalogue workflow discovers those details and
+keeps its compatibility evidence under `benchmarks/.llm-bench/` automatically.
+
 ## Custom prompts
 
 Custom prompts are named, reusable tests:
@@ -45,12 +50,15 @@ Custom prompts are named, reusable tests:
 
 ```bash
 llm-bench benchmark.json --prompt csv-review
-llm-bench benchmark.json --tests classification,csv-review
+llm-bench benchmark.json --tests exact-routing-check,csv-review
 ```
 
 For long content, use `prompt_file` relative to the config file. It must remain
 inside that directory; `..` paths are rejected. Use `prompt` or `prompt_file`,
 not both, and do not commit sensitive fixture data.
+
+For a migration-focused tutorial and runnable JSON, routing, and content-rule
+examples, see [Custom contract tests](custom-tests.md).
 
 ## Presets, aliases, and environments
 

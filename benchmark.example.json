@@ -39,23 +39,17 @@
     {
       "name": "openai-model",
       "provider": "openai",
-      "model": "replace-with-openai-model-id",
-      "input_cost_per_million": 0,
-      "output_cost_per_million": 0
+      "model": "replace-with-openai-model-id"
     },
     {
       "name": "anthropic-model",
       "provider": "anthropic",
-      "model": "replace-with-anthropic-model-id",
-      "input_cost_per_million": 0,
-      "output_cost_per_million": 0
+      "model": "replace-with-anthropic-model-id"
     },
     {
       "name": "gemini-model",
       "provider": "gemini",
-      "model": "replace-with-gemini-model-id",
-      "input_cost_per_million": 0,
-      "output_cost_per_million": 0
+      "model": "replace-with-gemini-model-id"
     },
     {
       "name": "model-through-openrouter",
@@ -64,9 +58,7 @@
       "headers": {
         "HTTP-Referer": "https://your-app.example",
         "X-OpenRouter-Title": "LLM Speed Bench"
-      },
-      "input_cost_per_million": 0,
-      "output_cost_per_million": 0
+      }
     },
     {
       "name": "grok-through-xai",

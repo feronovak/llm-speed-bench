@@ -9,6 +9,9 @@ from typing import Any
 # OpenRouter prices remain dynamic and take precedence when its catalog returns
 # them. Gemini 3.1 Pro uses the <=200k-input tier.
 PUBLIC_PRICING: dict[tuple[str, str], tuple[float, float, str]] = {
+    ("openai", "gpt-5.6-luna"): (1.0, 6.0, "2026-07-14"),
+    ("openai", "gpt-5.6-terra"): (2.5, 15.0, "2026-07-14"),
+    ("openai", "gpt-5.6-sol"): (5.0, 30.0, "2026-07-14"),
     ("openai", "gpt-5.5"): (5.0, 30.0, "2026-07-09"),
     ("openai", "gpt-5.4-mini"): (0.75, 4.5, "2026-07-09"),
     ("openai", "gpt-5.4-nano"): (0.2, 1.25, "2026-07-09"),
@@ -43,7 +46,8 @@ def apply_public_pricing(model: dict[str, Any]) -> dict[str, Any]:
         "input_cost_per_million": input_price,
         "output_cost_per_million": output_price,
         "pricing_metadata": {
-            "source": "public provider pricing",
+            "source": "official snapshot",
+            "confidence": "official",
             "as_of": as_of,
         },
     }
@@ -77,7 +81,7 @@ def pricing_freshness_report(
             )
             continue
         as_of = metadata.get("as_of")
-        if source == "public provider pricing" and as_of:
+        if source == "official snapshot" and as_of:
             age_days = (current - date.fromisoformat(as_of)).days
             if age_days > max_age_days:
                 warnings.append(
@@ -86,7 +90,7 @@ def pricing_freshness_report(
                         "provider": provider,
                         "severity": "warning",
                         "message": (
-                            f"public provider pricing is stale by {age_days} days"
+                            f"official pricing snapshot is stale by {age_days} days"
                         ),
                         "source": source,
                         "as_of": as_of,

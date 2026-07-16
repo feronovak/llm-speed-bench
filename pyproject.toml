@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-speed-bench"
-version = "1.0.3"
+version = "1.2.0"
 description = "Local smoke tests for live LLM models, latency, and cost"
 readme = "README.md"
 requires-python = ">=3.10"

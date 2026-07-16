@@ -15,6 +15,9 @@ mitigation. Do not include active API keys.
   `.env.production` file.
 - The CLI does not execute `.env.production` as shell code.
 - Catalog output removes custom request headers.
+- The local catalogue capability ledger records model compatibility outcomes and
+  safe request options, not probe response text or credentials; it is created
+  with owner-only permissions where the platform supports them.
 - Result artifacts redact every custom request-header value.
 - Result files can contain prompts, provider errors, model metadata, and
   optionally full responses. Treat `results/` as potentially sensitive.
