@@ -33,7 +33,7 @@ def benchmark_run_lock(output_dir: Path):
     import fcntl
 
     output_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    lock_path = output_dir / ".llm-bench.run.lock"
+    lock_path = output_dir / ".llm-preflight.run.lock"
     descriptor = os.open(lock_path, os.O_WRONLY | os.O_CREAT, 0o600)
     try:
         try:

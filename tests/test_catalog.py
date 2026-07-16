@@ -1,6 +1,10 @@
 import pytest
 
-from llm_bench.catalog import classify_catalog_model, discover_models, resolve_models
+from llm_preflight.catalog import (
+    classify_catalog_model,
+    discover_models,
+    resolve_models,
+)
 
 
 @pytest.mark.parametrize(
@@ -43,7 +47,7 @@ def test_catalog_ready_text_metadata_beats_a_misleading_model_name():
 
 def test_anthropic_catalog_preserves_official_capabilities(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.catalog._get_json",
+        "llm_preflight.catalog._get_json",
         lambda *args, **kwargs: {
             "data": [
                 {
@@ -81,7 +85,7 @@ def test_xai_uses_language_models_for_official_modalities(monkeypatch):
             ]
         }
 
-    monkeypatch.setattr("llm_bench.catalog._get_json", fake_get_json)
+    monkeypatch.setattr("llm_preflight.catalog._get_json", fake_get_json)
     monkeypatch.setenv("XAI_API_KEY", "test")
 
     model = discover_models({"provider": "xai", "limit": 1})[0]
@@ -97,7 +101,7 @@ def test_xai_uses_language_models_for_official_modalities(monkeypatch):
 
 def test_openai_text_family_is_visible_as_a_probe_candidate(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.catalog._get_json",
+        "llm_preflight.catalog._get_json",
         lambda *args, **kwargs: {"data": [{"id": "gpt-5.5"}]},
     )
     monkeypatch.setenv("OPENAI_API_KEY", "test")
@@ -110,7 +114,7 @@ def test_openai_text_family_is_visible_as_a_probe_candidate(monkeypatch):
 
 def test_gemini_tts_is_not_a_generic_text_probe(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.catalog._get_json",
+        "llm_preflight.catalog._get_json",
         lambda *args, **kwargs: {
             "models": [
                 {
@@ -129,7 +133,7 @@ def test_gemini_tts_is_not_a_generic_text_probe(monkeypatch):
 
 def test_openrouter_normalization_and_limit(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.catalog._get_json",
+        "llm_preflight.catalog._get_json",
         lambda *args, **kwargs: {
             "data": [
                 {
@@ -167,7 +171,7 @@ def test_openrouter_normalization_and_limit(monkeypatch):
 
 def test_gemini_filters_non_generation_models(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.catalog._get_json",
+        "llm_preflight.catalog._get_json",
         lambda *args, **kwargs: {
             "models": [
                 {
@@ -208,7 +212,7 @@ def test_xai_catalog_uses_native_language_models_endpoint_and_pricing(monkeypatc
             ]
         }
 
-    monkeypatch.setattr("llm_bench.catalog._get_json", fake_get_json)
+    monkeypatch.setattr("llm_preflight.catalog._get_json", fake_get_json)
     monkeypatch.setenv("XAI_API_KEY", "test")
     models = discover_models({"provider": "xai", "limit": 1})
     assert captured == [
@@ -224,7 +228,7 @@ def test_xai_catalog_uses_native_language_models_endpoint_and_pricing(monkeypatc
 
 def test_resolve_deduplicates_explicit_and_discovered(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.catalog.discover_models",
+        "llm_preflight.catalog.discover_models",
         lambda source: [{"provider": "openai", "model": "same"}],
     )
     models = resolve_models(
@@ -332,7 +336,7 @@ def test_catalog_rejects_non_http_base_url_before_opening(monkeypatch):
 def test_openrouter_encodes_list_query_values_as_repeated_parameters(monkeypatch):
     captured = []
     monkeypatch.setattr(
-        "llm_bench.catalog._get_json",
+        "llm_preflight.catalog._get_json",
         lambda url, *_args, **_kwargs: captured.append(url) or {"data": []},
     )
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")

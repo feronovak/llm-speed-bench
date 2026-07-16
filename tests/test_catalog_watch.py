@@ -1,4 +1,4 @@
-from llm_bench.catalog_watch import (
+from llm_preflight.catalog_watch import (
     build_candidate_config,
     catalog_diff,
     snapshot_catalog,

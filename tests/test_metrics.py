@@ -1,6 +1,6 @@
 import pytest
 
-from llm_bench.metrics import percentile, stats, summarize
+from llm_preflight.metrics import percentile, stats, summarize
 
 
 def test_percentile_interpolates():

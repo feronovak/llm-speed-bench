@@ -1,4 +1,4 @@
-from llm_bench.catalog_probe import probe_model
+from llm_preflight.catalog_probe import probe_model
 
 
 def test_probe_records_success_without_saving_response(monkeypatch, tmp_path):
@@ -6,7 +6,9 @@ def test_probe_records_success_without_saving_response(monkeypatch, tmp_path):
         def run(self, *_args, **_kwargs):
             return {"ok": True, "failure_category": None, "response": "OK"}
 
-    monkeypatch.setattr("llm_bench.catalog_probe.create_client", lambda *_: Client())
+    monkeypatch.setattr(
+        "llm_preflight.catalog_probe.create_client", lambda *_: Client()
+    )
 
     probe = probe_model(
         {
@@ -30,7 +32,9 @@ def test_probe_keeps_credential_failures_indeterminate(monkeypatch, tmp_path):
                 "error": "HTTP 401",
             }
 
-    monkeypatch.setattr("llm_bench.catalog_probe.create_client", lambda *_: Client())
+    monkeypatch.setattr(
+        "llm_preflight.catalog_probe.create_client", lambda *_: Client()
+    )
 
     probe = probe_model(
         {"provider": "openai", "model": "gpt-test"},
@@ -52,7 +56,9 @@ def test_probe_uses_failure_category_not_error_text_for_transient_failures(
                 "error": "endpoint parameter timed out",
             }
 
-    monkeypatch.setattr("llm_bench.catalog_probe.create_client", lambda *_: Client())
+    monkeypatch.setattr(
+        "llm_preflight.catalog_probe.create_client", lambda *_: Client()
+    )
 
     probe = probe_model(
         {"provider": "openai", "model": "gpt-test"},

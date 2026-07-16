@@ -1,5 +1,3 @@
-"""Public Python entry point for LLM Preflight."""
+"""Local, cross-provider preflight checks for an LLM model switch."""
 
-from llm_bench import __version__
-
-__all__ = ["__version__"]
+__version__ = "2.0.2"

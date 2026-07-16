@@ -1,6 +1,6 @@
 import pytest
 
-from llm_bench.profiles import evaluate_response, select_profiles
+from llm_preflight.profiles import evaluate_response, select_profiles
 
 
 def test_all_selects_every_supported_profile_except_coding():

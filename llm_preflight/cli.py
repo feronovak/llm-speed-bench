@@ -697,7 +697,7 @@ def _watch_new_main(argv: list[str]) -> None:
             f"catalog refresh needs these API keys: {keys}. Add them to "
             f"{args.config.parent / '.env.production'} and run refresh again"
         )
-    ledger_path = args.config.parent / ".llm-bench" / "capabilities.json"
+    ledger_path = args.config.parent / ".llm-preflight" / "capabilities.json"
     models = apply_probe_evidence(
         resolve_models(watch_config), load_ledger(ledger_path)
     )
@@ -1059,7 +1059,7 @@ def _catalog_main(argv: list[str]) -> None:
         config = apply_provider_presets(apply_model_aliases(load_config(args.config)))
         models = apply_probe_evidence(
             resolve_models(config),
-            load_ledger(args.config.parent / ".llm-bench" / "capabilities.json"),
+            load_ledger(args.config.parent / ".llm-preflight" / "capabilities.json"),
         )
         ready = [model for model in models if model.get("catalog_type") == "text-ready"]
         candidates = [
@@ -1087,7 +1087,9 @@ def _catalog_main(argv: list[str]) -> None:
         if input("Run probes? [y/N]: ").strip().casefold() not in {"y", "yes"}:
             print("Cancelled.")
             return
-        ledger = args.ledger or args.config.parent / ".llm-bench" / "capabilities.json"
+        ledger = (
+            args.ledger or args.config.parent / ".llm-preflight" / "capabilities.json"
+        )
         with benchmark_run_lock(ledger.parent):
             for model in selected:
                 probe = probe_model(model, ledger)

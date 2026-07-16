@@ -28,7 +28,7 @@ benchmarks/
 ├── approved.json    # models you deliberately keep
 ├── candidates.json  # temporary test plan; created later
 ├── results/         # saved benchmark evidence
-└── .llm-bench/      # automatic catalogue snapshots and probe evidence
+└── .llm-preflight/  # automatic catalogue snapshots and probe evidence
 ```
 
 Keep API keys in `benchmarks/.env.production`, never in JSON or Git. If your

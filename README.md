@@ -8,10 +8,6 @@ It is a local preflight tool—not a hosted evaluation platform, tracing system,
 RAG framework, or public leaderboard. Its results are evidence for your
 account, network, prompts, and validation rules.
 
-Formerly **LLM Speed Bench**. The primary command is `llm-preflight`;
-`llm-bench` remains a supported compatibility command. See the
-[migration guide](docs/migrating-to-llm-preflight.md).
-
 > [!WARNING]
 > Live benchmarks make paid API requests. Start with the no-key demo, preview
 > the plan before a live run, and keep limits and repetitions small.
@@ -189,8 +185,6 @@ Recommendations only consider models that pass every selected test.
   catalogue, and benchmark-result recovery.
 - [Tests, pricing, and safety](docs/tests-pricing-safety.md) — built-in tests,
   validators, pricing confidence, retries, and sensitive data.
-- [Migrating from llm-speed-bench](docs/migrating-to-llm-preflight.md) — what
-  the 2.0 rename changes for existing installs, scripts, and imports.
 - [Contributing](CONTRIBUTING.md) — development setup and the TDD workflow.
 - [Security](SECURITY.md) — reporting vulnerabilities.
 

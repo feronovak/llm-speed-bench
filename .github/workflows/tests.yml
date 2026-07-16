@@ -35,10 +35,10 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: python -m pip install -e ".[audit]"
-      - run: mypy llm_bench
-      - run: bandit -q -r llm_bench
+      - run: mypy llm_preflight
+      - run: bandit -q -r llm_preflight
       - name: Scan publishable files for secrets
         run: |
           detect-secrets-hook --baseline .secrets.baseline \
-            llm_bench tests .github .env.example \
+            llm_preflight tests .github .env.example \
             benchmark.example.json benchmark.auto.example.json pyproject.toml

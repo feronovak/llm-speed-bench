@@ -30,7 +30,7 @@ settings such as temperature, system prompt, and output limit are insufficient.
 For normal benchmarks, enter only the provider and model ID you intend to use.
 Do not copy catalogue internals such as `catalog_type`, `catalog_confidence`,
 or `adapter` into your JSON. The catalogue workflow discovers those details and
-keeps its compatibility evidence under `benchmarks/.llm-bench/` automatically.
+keeps its compatibility evidence under `benchmarks/.llm-preflight/` automatically.
 
 ### OpenAI-compatible endpoints
 

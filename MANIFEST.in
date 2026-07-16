@@ -15,4 +15,3 @@ exclude RELEASING.md
 prune docs
 prune .github
 prune tests
-prune legacy-pypi-shim

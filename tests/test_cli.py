@@ -6,8 +6,12 @@ import sys
 
 import pytest
 
-from llm_bench import cli
-from llm_bench.cli import catalog_output, format_progress_event, interactive_selection
+from llm_preflight import cli
+from llm_preflight.cli import (
+    catalog_output,
+    format_progress_event,
+    interactive_selection,
+)
 
 
 def test_interactive_selection_accepts_providers_families_profiles_and_repetitions(
@@ -19,7 +23,7 @@ def test_interactive_selection_accepts_providers_families_profiles_and_repetitio
         {"provider": "openrouter", "model": "qwen/qwen3.7-plus"},
         {"provider": "openrouter", "model": "deepseek/deepseek-v4-pro"},
     ]
-    monkeypatch.setattr("llm_bench.cli.resolve_models", lambda config: models)
+    monkeypatch.setattr("llm_preflight.cli.resolve_models", lambda config: models)
     answers = iter(["openai,openrouter/qwen", "1,4", "2", "", "y"])
 
     selected = interactive_selection(
@@ -42,7 +46,7 @@ def test_interactive_selection_accepts_providers_families_profiles_and_repetitio
 
 def test_interactive_selection_can_cancel(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.cli.resolve_models",
+        "llm_preflight.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     answers = iter(["all", "", "", "", "n"])
@@ -58,7 +62,7 @@ def test_interactive_selection_can_cancel(monkeypatch):
 
 def test_interactive_all_selects_functional_tests_but_not_load(monkeypatch):
     models = [{"provider": "mock", "model": "local", "response": "ok"}]
-    monkeypatch.setattr("llm_bench.cli.resolve_models", lambda config: models)
+    monkeypatch.setattr("llm_preflight.cli.resolve_models", lambda config: models)
     answers = iter(["all", "all", "", "4", "n"])
     output = []
 
@@ -78,7 +82,7 @@ def test_interactive_all_selects_functional_tests_but_not_load(monkeypatch):
 
 def test_interactive_selection_clears_screen_at_start(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.cli.resolve_models",
+        "llm_preflight.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     answers = iter(["all", "", "", "", "n"])
@@ -96,7 +100,7 @@ def test_interactive_selection_clears_screen_at_start(monkeypatch):
 
 def test_interactive_selection_can_color_distinct_sections(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.cli.resolve_models",
+        "llm_preflight.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
@@ -118,7 +122,7 @@ def test_interactive_selection_can_color_distinct_sections(monkeypatch):
 
 def test_interactive_selection_separates_repetitions_section(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.cli.resolve_models",
+        "llm_preflight.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
@@ -136,7 +140,7 @@ def test_interactive_selection_separates_repetitions_section(monkeypatch):
 
 def test_interactive_selection_lists_and_selects_named_custom_prompt(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.cli.resolve_models",
+        "llm_preflight.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
@@ -165,7 +169,7 @@ def test_interactive_selection_numbers_custom_prompts_after_builtin_profiles(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "llm_bench.cli.resolve_models",
+        "llm_preflight.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
@@ -209,7 +213,7 @@ def test_main_selects_named_custom_prompt_non_interactively(
     monkeypatch.setattr(cli, "save_result", lambda *args: tmp_path / "result.json")
     monkeypatch.setattr(cli, "console_report", lambda *args, **kwargs: "rendered")
     monkeypatch.setattr(
-        sys, "argv", ["llm-bench", str(config), "--prompt", "csv-review"]
+        sys, "argv", ["llm-preflight", str(config), "--prompt", "csv-review"]
     )
 
     cli.main()
@@ -240,7 +244,7 @@ def test_main_allows_profiles_to_mix_builtin_and_custom_prompts(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["llm-bench", str(config), "--profiles", "classification,csv-review"],
+        ["llm-preflight", str(config), "--profiles", "classification,csv-review"],
     )
 
     cli.main()
@@ -268,7 +272,7 @@ def test_main_allows_tests_alias_for_profiles(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(
         sys,
         "argv",
-        ["llm-bench", str(config), "--tests", "classification,csv-review"],
+        ["llm-preflight", str(config), "--tests", "classification,csv-review"],
     )
 
     cli.main()
@@ -283,7 +287,14 @@ def test_main_rejects_profiles_and_tests_together(monkeypatch, tmp_path, capsys)
     monkeypatch.setattr(
         sys,
         "argv",
-        ["llm-bench", str(config), "--profiles", "chat-fast", "--tests", "reasoning"],
+        [
+            "llm-preflight",
+            str(config),
+            "--profiles",
+            "chat-fast",
+            "--tests",
+            "reasoning",
+        ],
     )
 
     try:
@@ -297,7 +308,7 @@ def test_main_rejects_profiles_and_tests_together(monkeypatch, tmp_path, capsys)
 
 
 def test_help_lists_tests_before_profiles(monkeypatch, capsys):
-    monkeypatch.setattr(sys, "argv", ["llm-bench", "--help"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", "--help"])
 
     try:
         cli.main()
@@ -311,7 +322,7 @@ def test_help_lists_tests_before_profiles(monkeypatch, capsys):
 
 
 def test_help_describes_smoke_as_a_reduced_run(monkeypatch, capsys):
-    monkeypatch.setattr(sys, "argv", ["llm-bench", "--help"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", "--help"])
 
     with pytest.raises(SystemExit) as exc_info:
         cli.main()
@@ -340,7 +351,7 @@ def test_migration_check_dry_run_uses_fast_response_contract(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["llm-bench", str(config_path), "--migration-check", "--dry-run", "--json"],
+        ["llm-preflight", str(config_path), "--migration-check", "--dry-run", "--json"],
     )
 
     cli.main()
@@ -356,7 +367,7 @@ def test_migration_check_requires_a_benchmark_configuration(monkeypatch, capsys)
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "--quick",
             "Reply with ok.",
             "--models",
@@ -377,7 +388,7 @@ def test_migration_check_requires_a_benchmark_configuration(monkeypatch, capsys)
 
 def test_main_init_creates_a_no_key_mock_benchmark(monkeypatch, tmp_path, capsys):
     config_path = tmp_path / "first-benchmark.json"
-    monkeypatch.setattr(sys, "argv", ["llm-bench", "--init", str(config_path)])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", "--init", str(config_path)])
 
     cli.main()
 
@@ -419,7 +430,7 @@ def test_main_init_prints_module_commands_when_run_with_python_module(
 def test_main_init_refuses_to_overwrite_a_config(monkeypatch, tmp_path, capsys):
     config_path = tmp_path / "benchmark.json"
     config_path.write_text('{"prompt":"keep this"}\n')
-    monkeypatch.setattr(sys, "argv", ["llm-bench", "--init", str(config_path)])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", "--init", str(config_path)])
 
     with pytest.raises(SystemExit) as exc_info:
         cli.main()
@@ -438,7 +449,7 @@ def test_interactive_selection_shows_request_and_cost_estimate(monkeypatch):
             "output_cost_per_million": 2,
         }
     ]
-    monkeypatch.setattr("llm_bench.cli.resolve_models", lambda config: models)
+    monkeypatch.setattr("llm_preflight.cli.resolve_models", lambda config: models)
     output = []
     answers = iter(["all", "", "2", "", "n"])
 
@@ -459,7 +470,7 @@ def test_interactive_selection_shows_request_and_cost_estimate(monkeypatch):
 
 def test_interactive_selection_explains_functional_tests_request_breakdown(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.cli.resolve_models",
+        "llm_preflight.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
@@ -480,7 +491,7 @@ def test_interactive_selection_explains_functional_tests_request_breakdown(monke
 
 def test_interactive_selection_shows_colored_run_plan_and_status_meaning(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.cli.resolve_models",
+        "llm_preflight.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
@@ -507,7 +518,7 @@ def test_interactive_selection_shows_colored_run_plan_and_status_meaning(monkeyp
 
 def test_interactive_selection_visually_separates_each_stage(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.cli.resolve_models",
+        "llm_preflight.cli.resolve_models",
         lambda config: [{"provider": "mock", "model": "local"}],
     )
     output = []
@@ -531,7 +542,7 @@ def test_interactive_selection_visually_separates_each_stage(monkeypatch):
 
 def test_interactive_selection_accepts_stop_mode(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.cli.resolve_models",
+        "llm_preflight.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     answers = iter(["all", "1", "1", "2", "y"])
@@ -548,7 +559,7 @@ def test_interactive_selection_accepts_stop_mode(monkeypatch):
 
 def test_interactive_selection_defaults_to_failed_response_retention(monkeypatch):
     monkeypatch.setattr(
-        "llm_bench.cli.resolve_models",
+        "llm_preflight.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     answers = iter(["all", "", "", "", "y"])
@@ -689,7 +700,7 @@ def test_main_catalog_prints_safe_json(monkeypatch, tmp_path, capsys):
         "resolve_models",
         lambda value: [{"model": "fake", "headers": {"Authorization": "secret"}}],
     )
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--catalog"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", str(config), "--catalog"])
     cli.main()
     output = json.loads(capsys.readouterr().out)
     assert output == [{"model": "fake"}]
@@ -707,7 +718,14 @@ def test_watch_new_initializes_then_reports_new_models(monkeypatch, tmp_path, ca
     monkeypatch.setattr(
         sys,
         "argv",
-        ["llm-bench", "watch-new", str(config), "--snapshot", str(snapshot), "--json"],
+        [
+            "llm-preflight",
+            "watch-new",
+            str(config),
+            "--snapshot",
+            str(snapshot),
+            "--json",
+        ],
     )
     cli.main()
     assert json.loads(capsys.readouterr().out)["initialized"] is True
@@ -723,7 +741,14 @@ def test_watch_new_initializes_then_reports_new_models(monkeypatch, tmp_path, ca
     monkeypatch.setattr(
         sys,
         "argv",
-        ["llm-bench", "watch-new", str(config), "--snapshot", str(snapshot), "--json"],
+        [
+            "llm-preflight",
+            "watch-new",
+            str(config),
+            "--snapshot",
+            str(snapshot),
+            "--json",
+        ],
     )
     cli.main()
     assert json.loads(capsys.readouterr().out)["diff"]["added"][0]["model"] == "new"
@@ -751,7 +776,7 @@ def test_first_watch_test_runs_discovered_models_and_bootstraps_snapshot(
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "watch-new",
             str(watch),
             "--against",
@@ -776,7 +801,7 @@ def test_catalog_refresh_uses_the_catalog_command_family(monkeypatch, tmp_path, 
         cli, "resolve_models", lambda value: [{"provider": "openai", "model": "old"}]
     )
     monkeypatch.setattr(
-        sys, "argv", ["llm-bench", "catalog", "refresh", str(config), "--json"]
+        sys, "argv", ["llm-preflight", "catalog", "refresh", str(config), "--json"]
     )
 
     cli.main()
@@ -790,7 +815,7 @@ def test_catalog_init_creates_a_ready_local_workspace(monkeypatch, tmp_path):
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "catalog",
             "init",
             str(workspace),
@@ -817,7 +842,9 @@ def test_catalog_init_guides_new_users_to_all_providers_by_default(
 ):
     workspace = tmp_path / "benchmarks"
     monkeypatch.setattr("builtins.input", lambda prompt: "")
-    monkeypatch.setattr(sys, "argv", ["llm-bench", "catalog", "init", str(workspace)])
+    monkeypatch.setattr(
+        sys, "argv", ["llm-preflight", "catalog", "init", str(workspace)]
+    )
 
     cli.main()
 
@@ -842,7 +869,9 @@ def test_catalog_init_checks_an_existing_workspace_before_provider_setup(
     monkeypatch.setattr(
         "builtins.input", lambda prompt: prompts.append(prompt) or next(answers)
     )
-    monkeypatch.setattr(sys, "argv", ["llm-bench", "catalog", "init", str(workspace)])
+    monkeypatch.setattr(
+        sys, "argv", ["llm-preflight", "catalog", "init", str(workspace)]
+    )
 
     cli.main()
 
@@ -858,7 +887,9 @@ def test_catalog_init_reuses_an_existing_parent_env_file(monkeypatch, tmp_path):
     parent_env.write_text('OPENAI_API_KEY="existing-key"\n')
     workspace = tmp_path / "benchmarks"
     monkeypatch.setattr("builtins.input", lambda prompt: "openai")
-    monkeypatch.setattr(sys, "argv", ["llm-bench", "catalog", "init", str(workspace)])
+    monkeypatch.setattr(
+        sys, "argv", ["llm-preflight", "catalog", "init", str(workspace)]
+    )
 
     cli.main()
 
@@ -875,7 +906,7 @@ def test_catalog_prepare_always_selects_unapproved_models(monkeypatch, tmp_path)
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "catalog",
             "prepare",
             str(tmp_path / "watch.json"),
@@ -901,7 +932,7 @@ def test_catalog_test_writes_a_runnable_plan_for_approved_models(monkeypatch, tm
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "catalog",
             "test",
             str(watch),
@@ -942,7 +973,9 @@ def test_catalog_refresh_lists_all_missing_provider_keys_before_discovery(
         "resolve_models",
         lambda config: (_ for _ in ()).throw(AssertionError("must not discover")),
     )
-    monkeypatch.setattr(sys, "argv", ["llm-bench", "catalog", "refresh", str(watch)])
+    monkeypatch.setattr(
+        sys, "argv", ["llm-preflight", "catalog", "refresh", str(watch)]
+    )
 
     with pytest.raises(SystemExit) as exc_info:
         cli.main()
@@ -1010,7 +1043,7 @@ def test_watch_new_writes_a_regular_candidate_benchmark_config(monkeypatch, tmp_
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "watch-new",
             str(watch),
             "--snapshot",
@@ -1052,7 +1085,7 @@ def test_watch_new_candidate_config_does_not_persist_inherited_headers(
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "watch-new",
             str(watch),
             "--against",
@@ -1092,7 +1125,7 @@ def test_watch_new_failed_candidate_run_does_not_advance_snapshot(
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "watch-new",
             str(watch),
             "--snapshot",
@@ -1130,7 +1163,7 @@ def test_watch_new_can_write_all_currently_unapproved_models(monkeypatch, tmp_pa
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "watch-new",
             str(watch),
             "--against",
@@ -1160,7 +1193,7 @@ def test_watch_new_reports_existing_output_as_a_cli_error(
             ValueError(f"{output} already exists; refusing to overwrite it")
         ),
     )
-    monkeypatch.setattr(sys, "argv", ["llm-bench", "watch-new", "watch.json"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", "watch-new", "watch.json"])
 
     with pytest.raises(SystemExit) as exc_info:
         cli.main()
@@ -1199,7 +1232,7 @@ def test_interactive_watch_reviews_unapproved_models_on_first_snapshot(
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "watch-new",
             str(config),
             "--snapshot",
@@ -1244,7 +1277,7 @@ def test_watch_new_interrupt_exits_cleanly(monkeypatch, tmp_path, capsys):
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "watch-new",
             str(config),
             "--interactive",
@@ -1282,7 +1315,7 @@ def test_approve_model_records_a_passing_result(monkeypatch, tmp_path):
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "approve-model",
             "openai:candidate",
             "--from",
@@ -1317,7 +1350,14 @@ def test_models_remove_deletes_a_permanent_model_and_records_when(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["llm-bench", "models", "remove", "openai:remove", "--approved", str(approved)],
+        [
+            "llm-preflight",
+            "models",
+            "remove",
+            "openai:remove",
+            "--approved",
+            str(approved),
+        ],
     )
     monkeypatch.setattr("builtins.input", lambda prompt: "y")
 
@@ -1446,7 +1486,7 @@ def test_main_runs_benchmark_saves_and_prints_console_report(
     monkeypatch.setattr(cli, "run_benchmark", lambda *args, **kwargs: result)
     monkeypatch.setattr(cli, "save_result", lambda *args: tmp_path / "result.json")
     monkeypatch.setattr(cli, "console_report", lambda *args, **kwargs: "rendered")
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config)])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", str(config)])
     cli.main()
     captured = capsys.readouterr()
     assert captured.out.strip() == "rendered"
@@ -1468,7 +1508,7 @@ def test_main_json_output_redacts_result_boundary(monkeypatch, tmp_path, capsys)
 
     monkeypatch.setattr(cli, "run_benchmark", lambda *args, **kwargs: result)
     monkeypatch.setattr(cli, "save_result", fake_save)
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--json"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", str(config), "--json"])
 
     cli.main()
 
@@ -1489,7 +1529,7 @@ def test_main_smoke_defaults_to_failed_response_retention(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "run_benchmark", fake_run)
     monkeypatch.setattr(cli, "save_result", lambda *args: tmp_path / "result.json")
     monkeypatch.setattr(cli, "console_report", lambda *args, **kwargs: "rendered")
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--smoke"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", str(config), "--smoke"])
 
     cli.main()
 
@@ -1510,7 +1550,9 @@ def test_main_dry_run_prints_resolved_plan_without_running(
         raise AssertionError("dry-run must not run benchmark")
 
     monkeypatch.setattr(cli, "run_benchmark", fail_run)
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--dry-run", "--json"])
+    monkeypatch.setattr(
+        sys, "argv", ["llm-preflight", str(config), "--dry-run", "--json"]
+    )
 
     cli.main()
 
@@ -1544,7 +1586,7 @@ def test_main_dry_run_prints_human_readable_plan_by_default(
         '{"name":"starter","prompt":"hello","models":[{"provider":"mock",'
         '"model":"local","response":"ok"}],"warmups":0}'
     )
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--dry-run"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", str(config), "--dry-run"])
 
     cli.main()
 
@@ -1592,7 +1634,9 @@ def test_main_dry_run_includes_pricing_warnings(monkeypatch, tmp_path, capsys):
         '{"prompt":"hello","models":[{"provider":"openai_compatible",'
         '"model":"local"}],"warmups":0}'
     )
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--dry-run", "--json"])
+    monkeypatch.setattr(
+        sys, "argv", ["llm-preflight", str(config), "--dry-run", "--json"]
+    )
 
     cli.main()
 
@@ -1607,7 +1651,7 @@ def test_main_pricing_check_exits_nonzero_for_unknown_pricing(
     config.write_text(
         '{"prompt":"hello","models":[{"provider":"openai_compatible","model":"local"}]}'
     )
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--pricing-check"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", str(config), "--pricing-check"])
 
     try:
         cli.main()
@@ -1631,7 +1675,9 @@ def test_main_dry_run_redacts_secrets(monkeypatch, tmp_path, capsys):
         '"request":{"temperature":0,"metadata_token":"dry-run-redaction-secret"}}'
     )
 
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--dry-run", "--json"])
+    monkeypatch.setattr(
+        sys, "argv", ["llm-preflight", str(config), "--dry-run", "--json"]
+    )
 
     cli.main()
 
@@ -1649,7 +1695,7 @@ def test_main_can_skip_default_env_file(monkeypatch, tmp_path):
     env_file.write_text("GEMINI_API_KEY=no-env-file-redaction-secret\n")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setattr(
-        sys, "argv", ["llm-bench", str(config), "--dry-run", "--no-env-file"]
+        sys, "argv", ["llm-preflight", str(config), "--dry-run", "--no-env-file"]
     )
 
     cli.main()
@@ -1666,7 +1712,7 @@ def test_main_can_load_explicit_env_file(monkeypatch, tmp_path):
     monkeypatch.setattr(
         sys,
         "argv",
-        ["llm-bench", str(config), "--dry-run", "--env-file", str(env_file)],
+        ["llm-preflight", str(config), "--dry-run", "--env-file", str(env_file)],
     )
 
     cli.main()
@@ -1685,7 +1731,7 @@ def test_main_quick_loads_default_env_file_from_current_directory(
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "--quick",
             "hello",
             "--models",
@@ -1708,7 +1754,7 @@ def test_main_quick_can_skip_default_env_file(monkeypatch, tmp_path):
         sys,
         "argv",
         [
-            "llm-bench",
+            "llm-preflight",
             "--quick",
             "hello",
             "--models",
@@ -1737,7 +1783,7 @@ def test_main_stop_on_api_error_sets_config(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "save_result", lambda *args: tmp_path / "result.json")
     monkeypatch.setattr(cli, "console_report", lambda *args, **kwargs: "rendered")
     monkeypatch.setattr(
-        sys, "argv", ["llm-bench", str(config), "--stop-on", "api-error"]
+        sys, "argv", ["llm-preflight", str(config), "--stop-on", "api-error"]
     )
 
     cli.main()
@@ -1759,7 +1805,7 @@ def test_main_fail_fast_alias_sets_any_fail(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "run_benchmark", fake_run)
     monkeypatch.setattr(cli, "save_result", lambda *args: tmp_path / "result.json")
     monkeypatch.setattr(cli, "console_report", lambda *args, **kwargs: "rendered")
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--fail-fast"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", str(config), "--fail-fast"])
 
     cli.main()
 
@@ -1774,7 +1820,7 @@ def test_main_dry_run_explains_all_tests_load_expansion(monkeypatch, tmp_path, c
     monkeypatch.setattr(
         sys,
         "argv",
-        ["llm-bench", str(config), "--tests", "all", "--dry-run", "--json"],
+        ["llm-preflight", str(config), "--tests", "all", "--dry-run", "--json"],
     )
 
     cli.main()
@@ -1803,7 +1849,7 @@ def test_main_enforces_budget_for_tests_selected_on_command_line(monkeypatch, tm
         raise AssertionError("budget failure must prevent benchmark execution")
 
     monkeypatch.setattr(cli, "run_benchmark", fail_run)
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--tests", "all"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", str(config), "--tests", "all"])
 
     with pytest.raises(SystemExit) as exc_info:
         cli.main()
@@ -1833,7 +1879,7 @@ def test_main_exits_one_for_profile_validation_failures(monkeypatch, tmp_path, c
     monkeypatch.setattr(cli, "run_benchmark", lambda *args, **kwargs: result)
     monkeypatch.setattr(cli, "save_result", lambda *args: tmp_path / "result.json")
     monkeypatch.setattr(cli, "console_report", lambda *args, **kwargs: "rendered")
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--tests", "all"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", str(config), "--tests", "all"])
 
     try:
         cli.main()
@@ -1857,7 +1903,7 @@ def test_main_no_save_skips_artifact_writes(monkeypatch, tmp_path, capsys):
         lambda *args: (_ for _ in ()).throw(AssertionError("must not save")),
     )
     monkeypatch.setattr(cli, "console_report", lambda *args, **kwargs: "rendered")
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config), "--no-save"])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", str(config), "--no-save"])
 
     cli.main()
 
@@ -1879,7 +1925,7 @@ def test_main_interrupt_exits_cleanly_without_saving(monkeypatch, tmp_path, caps
         "save_result",
         lambda *args: (_ for _ in ()).throw(AssertionError("must not save")),
     )
-    monkeypatch.setattr(sys, "argv", ["llm-bench", str(config)])
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", str(config)])
 
     with pytest.raises(SystemExit) as exc_info:
         cli.main()
@@ -1898,7 +1944,7 @@ def test_cli_process_exit_codes_stop_modes_and_budget_enforcement(tmp_path):
             [
                 sys.executable,
                 "-m",
-                "llm_bench.cli",
+                "llm_preflight.cli",
                 str(config_path),
                 "--no-save",
                 "--json",

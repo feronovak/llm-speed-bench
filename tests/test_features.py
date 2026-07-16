@@ -1,6 +1,6 @@
 import pytest
 
-from llm_bench.features import (
+from llm_preflight.features import (
     apply_environment,
     apply_migration_check,
     apply_model_aliases,

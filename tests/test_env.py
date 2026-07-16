@@ -3,8 +3,8 @@ import socket
 
 import pytest
 
-from llm_bench.env import load_env_file
-from llm_bench.security import require_http_url
+from llm_preflight.env import load_env_file
+from llm_preflight.security import require_http_url
 
 
 def test_loads_production_env_without_overwriting_existing_value(tmp_path, monkeypatch):

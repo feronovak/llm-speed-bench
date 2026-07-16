@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from llm_bench.pricing import apply_public_pricing, pricing_freshness_report
+from llm_preflight.pricing import apply_public_pricing, pricing_freshness_report
 
 
 def test_public_pricing_marks_user_overrides():

@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from llm_bench.runner import (
+from llm_preflight.runner import (
     benchmark_run_lock,
     console_report,
     custom_prompt_profile,
@@ -245,7 +245,7 @@ def test_unexpected_per_model_request_exception_is_saved_as_api_failure(monkeypa
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client",
+        "llm_preflight.runner.create_client",
         lambda model, _timeout: Client(model["model"] == "broken"),
     )
     result = run_benchmark(
@@ -283,7 +283,7 @@ def test_profile_run_groups_quality_and_operational_metrics(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
     result = run_benchmark(
         {
@@ -322,7 +322,7 @@ def test_run_benchmark_reports_live_model_and_request_progress(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
     events = []
 
@@ -398,7 +398,7 @@ def test_profile_progress_reports_invalid_outputs_separately(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
     events = []
 
@@ -439,7 +439,7 @@ def test_load_profile_progress_includes_concurrency_level(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
     events = []
 
@@ -477,7 +477,7 @@ def test_run_benchmark_can_select_profiles_from_config(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
     result = run_benchmark(
         {
@@ -512,7 +512,7 @@ def test_run_benchmark_can_mix_builtin_and_custom_prompt_profiles(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
     result = run_benchmark(
         {
@@ -563,7 +563,7 @@ def test_custom_prompt_profile_presets_expand_into_request_options(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
 
     run_benchmark(
@@ -614,7 +614,7 @@ def test_profile_runs_can_save_only_failed_responses(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
 
     result = run_benchmark(
@@ -663,7 +663,7 @@ def test_run_benchmark_records_failure_reasons_and_can_save_only_failures(monkey
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
     result = run_benchmark(
         {
@@ -706,7 +706,7 @@ def test_run_benchmark_stop_on_any_fail_stops_after_failed_model(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient(model)
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient(model)
     )
 
     result = run_benchmark(
@@ -748,7 +748,7 @@ def test_run_benchmark_stop_on_api_error_ignores_test_failures(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient(model)
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient(model)
     )
 
     result = run_benchmark(
@@ -792,7 +792,7 @@ def test_run_benchmark_stop_on_test_fail_stops_on_invalid_output(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient(model)
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient(model)
     )
 
     result = run_benchmark(
@@ -831,7 +831,7 @@ def test_failed_validation_keeps_response_preview_without_full_response(monkeypa
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
 
     result = run_benchmark(
@@ -870,7 +870,7 @@ def test_failed_profile_validation_keeps_response_preview(monkeypatch):
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
 
     result = run_benchmark(
@@ -908,7 +908,7 @@ def test_validation_failure_summary_hints_use_real_pipeline_samples(monkeypatch)
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
 
     result = run_benchmark(
@@ -947,7 +947,7 @@ def test_profile_validation_failure_summary_hints_use_real_pipeline_samples(
             }
 
     monkeypatch.setattr(
-        "llm_bench.runner.create_client", lambda model, timeout: FakeClient()
+        "llm_preflight.runner.create_client", lambda model, timeout: FakeClient()
     )
 
     result = run_benchmark(

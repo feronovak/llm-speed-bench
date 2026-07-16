@@ -21,7 +21,7 @@ jobs:
       - run: make test
       - run: make audit
       - id: version
-        run: echo "version=$(python -c 'from llm_bench import __version__; print(__version__)')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(python -c 'from llm_preflight import __version__; print(__version__)')" >> "$GITHUB_OUTPUT"
       - run: python -m build
       - run: python -m twine check dist/*
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

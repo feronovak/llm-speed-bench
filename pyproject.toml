@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-preflight"
-version = "2.0.1"
+version = "2.0.2"
 description = "Local, cross-provider preflight checks for an LLM model switch"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,10 +32,9 @@ release = ["build>=1.2", "twine>=6"]
 
 [project.scripts]
 llm-preflight = "llm_preflight.__main__:main"
-llm-bench = "llm_preflight.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["llm_bench*", "llm_preflight*"]
+include = ["llm_preflight*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -44,7 +43,7 @@ addopts = "--strict-markers"
 
 [tool.coverage.run]
 branch = true
-source = ["llm_bench", "llm_preflight"]
+source = ["llm_preflight"]
 
 [tool.coverage.report]
 fail_under = 80

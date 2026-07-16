@@ -117,7 +117,9 @@ def build_candidate_config(
 
 
 def default_snapshot_path(config_path: Path) -> Path:
-    return config_path.parent / ".llm-bench" / "catalogs" / f"{config_path.stem}.json"
+    return (
+        config_path.parent / ".llm-preflight" / "catalogs" / f"{config_path.stem}.json"
+    )
 
 
 def load_snapshot(path: Path) -> list[dict[str, Any]] | None:

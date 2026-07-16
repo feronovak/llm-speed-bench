@@ -1,6 +1,6 @@
 import json
 
-from llm_bench.redaction import redact_secrets
+from llm_preflight.redaction import redact_secrets
 
 
 def test_redact_secrets_masks_sensitive_keys_recursively():

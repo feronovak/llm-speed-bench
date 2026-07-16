@@ -4,9 +4,8 @@ Run `llm-preflight --help` for the installed version. The options below match th
 release. `config` is a benchmark JSON path and is required unless `--init`,
 `--quick`, `--diff`, or `--replay` is used.
 
-`llm-preflight` is the primary command. `llm-bench` remains a fully supported
-compatibility command; both invoke the same program and accept the same flags.
-From a source checkout, use `python3 -m llm_preflight`.
+`llm-preflight` is the primary command. From a source checkout, use
+`python3 -m llm_preflight`.
 
 | Option | Default | Purpose |
 |---|---:|---|
@@ -91,7 +90,7 @@ temporary candidate plan, benchmark execution, and permanent approval separate.
 | `catalog init [DIRECTORY] [--providers LIST] [--replace]` | Create an ignored local workspace with `watch.json`, `approved.json`, `.env.production`, and `results/`. Without `--providers`, it asks once and Enter means all supported providers. For an existing workspace, it asks before rewriting only `watch.json`; `--replace` is the scripted equivalent and preserves approvals, keys, and results. |
 | `catalog refresh WATCH_CONFIG` | Fetch provider metadata, classify catalogue entries, and update the local snapshot. It makes no generation requests. Optional legacy watch flags such as `--json`, `--snapshot`, and `--env-file` remain available. |
 | `catalog prepare WATCH_CONFIG --against APPROVED --output CANDIDATES` | Group unapproved `text-ready` candidates by provider, require an explicit model selection, then write a temporary benchmark plan. `text-candidate` models first use `catalog probe`; non-text types are not offered to the generic chat benchmark. Use `--replace` only when deliberately rebuilding that plan. |
-| `catalog probe WATCH_CONFIG [--models LIST]` | Review `text-candidate` models, then make one explicitly confirmed, provider-native minimal request per selection. Results are saved locally in `.llm-bench/capabilities.json`; response text and keys are never stored. |
+| `catalog probe WATCH_CONFIG [--models LIST]` | Review `text-candidate` models, then make one explicitly confirmed, provider-native minimal request per selection. Results are saved locally in `.llm-preflight/capabilities.json`; response text and keys are never stored. |
 | `catalog test WATCH_CONFIG --approved APPROVED --output CONFIG` | Write a runnable benchmark plan for permanent approved models, using the test settings in the watch config. |
 | `CANDIDATES --interactive --approve-to APPROVED` | Run the single interactive benchmark flow, then offer passing models for approval. |
 | `models approve PROVIDER:MODEL --from RESULT --approved APPROVED` | Explicitly approve one passing model from a saved result, optionally with `--note TEXT`. |

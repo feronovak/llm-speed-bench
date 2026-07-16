@@ -30,7 +30,7 @@ used as optional verification, but never as part of the unit suite.
 
 ## Code map
 
-- `llm_bench/cli.py` owns commands, interactive prompts, and output boundaries.
+- `llm_preflight/cli.py` owns commands, interactive prompts, and output boundaries.
 - `runner.py` owns benchmark orchestration, validation application, reports, and
   saved artifacts; `metrics.py` summarizes samples.
 - `client.py` owns provider adapters, request translation, retries, and timing.

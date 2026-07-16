@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 2.0.2 - 2026-07-16
+
+LLM Preflight is a local, cross-provider preflight CLI for validating a model
+switch before it reaches production. It runs deterministic prompt validation
+alongside latency, tokens, and cost across OpenAI, Anthropic, Gemini, xAI,
+OpenRouter, and OpenAI-compatible providers.
+
+The project now ships as a single package and command: `llm_preflight` /
+`llm-preflight`. All compatibility surfaces from the earlier `llm-speed-bench`
+/ `llm_bench` naming — the `llm-bench` command alias, the `llm_bench` import
+namespace, and the legacy PyPI compatibility shim — have been removed.
+
 ## 2.0.1 - 2026-07-16
 
 ### Fixed

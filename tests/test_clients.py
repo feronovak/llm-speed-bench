@@ -3,7 +3,7 @@ import urllib.error
 
 import pytest
 
-from llm_bench.client import (
+from llm_preflight.client import (
     AnthropicClient,
     GeminiClient,
     MAX_RESPONSE_BYTES,
@@ -34,7 +34,7 @@ def test_openai_responses_adapter_uses_minimal_safe_probe_request():
 def _resolve_provider_hosts_to_a_public_address(monkeypatch):
     """Keep unit fixtures independent from the machine's DNS configuration."""
     monkeypatch.setattr(
-        "llm_bench.security.socket.getaddrinfo",
+        "llm_preflight.security.socket.getaddrinfo",
         lambda *args, **kwargs: [(2, 1, 6, "", ("8.8.8.8", 443))],
     )
 
@@ -59,7 +59,7 @@ def test_runtime_url_validation_failure_becomes_a_normal_api_failure(monkeypatch
         10,
     )
     monkeypatch.setattr(
-        "llm_bench.client.require_http_url",
+        "llm_preflight.client.require_http_url",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             ValueError("URL host could not be resolved: 'api.example.test'")
         ),
@@ -490,7 +490,7 @@ def test_client_rejects_an_oversized_streaming_response(monkeypatch):
 
 
 def test_retry_delay_adds_bounded_jitter(monkeypatch):
-    monkeypatch.setattr("llm_bench.client.random.uniform", lambda low, high: 0.125)
+    monkeypatch.setattr("llm_preflight.client.random.uniform", lambda low, high: 0.125)
 
     delay = _retry_delay(
         {
@@ -626,7 +626,9 @@ def test_success_latency_excludes_previous_retry_and_backoff(monkeypatch):
     timestamps = iter([0.0, 1.0, 10.0, 12.0, 15.0])
     monkeypatch.setenv("OPENAI_API_KEY", "test")
     monkeypatch.setattr("urllib.request.urlopen", flaky)
-    monkeypatch.setattr("llm_bench.client.time.perf_counter", lambda: next(timestamps))
+    monkeypatch.setattr(
+        "llm_preflight.client.time.perf_counter", lambda: next(timestamps)
+    )
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
 
     sample = create_client({"provider": "openai", "model": "model-a"}, 10).run(

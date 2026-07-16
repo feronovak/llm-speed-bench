@@ -1,4 +1,8 @@
-from llm_bench.capability_ledger import apply_probe_evidence, load_ledger, record_probe
+from llm_preflight.capability_ledger import (
+    apply_probe_evidence,
+    load_ledger,
+    record_probe,
+)
 
 
 def test_probe_ledger_records_account_specific_evidence(tmp_path):

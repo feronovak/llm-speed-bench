@@ -1,4 +1,4 @@
-VERSION := $(shell python3 -c "from llm_bench import __version__; print(__version__)")
+VERSION := $(shell python3 -c "from llm_preflight import __version__; print(__version__)")
 DIST_FILES := dist/llm_preflight-$(VERSION)*
 
 .PHONY: audit check-dist coverage package publish-test test test-one
@@ -22,10 +22,10 @@ publish-test: package check-dist
 audit:
 	ruff format --check . --exclude results
 	ruff check . --exclude results
-	mypy llm_bench llm_preflight
-	bandit -q -r llm_bench llm_preflight
+	mypy llm_preflight
+	bandit -q -r llm_preflight
 	detect-secrets-hook --baseline .secrets.baseline \
-		llm_bench llm_preflight tests .github .env.example \
+		llm_preflight tests .github .env.example \
 		benchmark.example.json benchmark.auto.example.json pyproject.toml
 
 test-one:

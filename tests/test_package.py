@@ -2,50 +2,30 @@ import json
 import re
 from pathlib import Path
 
-from llm_bench import __version__
-from llm_bench import cli
-from llm_bench.runner import run_benchmark
+from llm_preflight import __version__
+from llm_preflight import cli
+from llm_preflight.runner import run_benchmark
 
 
 def test_package_version_is_stable_release():
-    assert __version__ == "2.0.1"
+    assert __version__ == "2.0.2"
 
 
-def test_preflight_is_the_primary_command_and_bench_remains_compatible(monkeypatch):
+def test_llm_preflight_is_the_only_console_command(monkeypatch):
     monkeypatch.setattr("sys.argv", ["llm-preflight"])
     assert cli._display_command() == "llm-preflight"
 
     pyproject = Path("pyproject.toml").read_text()
     assert 'name = "llm-preflight"' in pyproject
     assert 'llm-preflight = "llm_preflight.__main__:main"' in pyproject
-    assert 'llm-bench = "llm_preflight.__main__:main"' in pyproject
+    assert "llm-bench" not in pyproject
+    assert "llm_bench" not in pyproject
 
 
 def test_preflight_has_a_public_python_module_entry_point():
-    from llm_preflight import __version__ as public_version
     from llm_preflight.__main__ import main
 
-    assert public_version == __version__
     assert main is cli.main
-
-
-def test_legacy_pypi_distribution_is_a_dependency_only_compatibility_shim():
-    shim = Path("legacy-pypi-shim/pyproject.toml").read_text()
-
-    assert 'name = "llm-speed-bench"' in shim
-    assert "llm-preflight>=2.0.0,<3.0.0" in shim
-    assert 'llm-bench = "llm_preflight.__main__:main"' in shim
-    assert not (Path("legacy-pypi-shim") / "llm_bench").exists()
-
-
-def test_legacy_shim_can_only_be_published_by_explicit_manual_confirmation():
-    workflow = Path(".github/workflows/publish-legacy-shim.yml").read_text()
-
-    assert "workflow_dispatch:" in workflow
-    assert 'default: ""' in workflow
-    assert "inputs.confirm == 'PUBLISH-LEGACY-SHIM'" in workflow
-    assert "legacy-pypi-shim" in workflow
-    assert "pypa/gh-action-pypi-publish@release/v1" in workflow
 
 
 def test_build_backend_supports_editable_installs_without_an_unnecessary_floor():
@@ -55,13 +35,14 @@ def test_build_backend_supports_editable_installs_without_an_unnecessary_floor()
     assert 'build-backend = "setuptools.build_meta"' in pyproject
 
 
-def test_legacy_installer_has_explicit_package_metadata_fallback():
+def test_setup_py_has_only_the_single_console_entry_point():
     setup = Path("setup.py").read_text()
 
     assert 'name="llm-preflight"' in setup
-    assert 'version="2.0.1"' in setup
+    assert 'version="2.0.2"' in setup
     assert '"llm-preflight=llm_preflight.__main__:main"' in setup
-    assert '"llm-bench=llm_preflight.__main__:main"' in setup
+    assert "llm-bench" not in setup
+    assert "llm_bench" not in setup
 
 
 def test_example_does_not_present_unknown_model_pricing_as_free():
@@ -94,7 +75,6 @@ def test_custom_contract_examples_are_parseable_and_documented():
 def test_public_docs_make_the_catalog_lifecycle_primary():
     cli_reference = Path("docs/cli-reference.md").read_text()
     tutorial = Path("docs/model-watch.md").read_text()
-    changelog = Path("CHANGELOG.md").read_text()
 
     for command in (
         "catalog init",
@@ -109,7 +89,6 @@ def test_public_docs_make_the_catalog_lifecycle_primary():
         assert command in tutorial
     assert "compatibility aliases" in cli_reference
     assert "compatibility aliases" in tutorial
-    assert "catalog init" in changelog
     assert "catalog prepare" in Path("README.md").read_text()
     assert "catalog prepare" in Path("docs/workflows.md").read_text()
     assert "--approve-to" in Path("docs/interactive.md").read_text()
@@ -154,12 +133,13 @@ def test_release_targets_only_current_version_artifacts():
     makefile = Path("Makefile").read_text()
 
     assert (
-        'VERSION := $(shell python3 -c "from llm_bench import __version__; print(__version__)")'
+        'VERSION := $(shell python3 -c "from llm_preflight import __version__; print(__version__)")'
         in makefile
     )
     assert "DIST_FILES := dist/llm_preflight-$(VERSION)*" in makefile
     assert "python3 -m twine check $(DIST_FILES)" in makefile
     assert "python3 -m twine upload --repository testpypi $(DIST_FILES)" in makefile
+    assert "llm_bench" not in makefile
 
 
 def test_source_distribution_manifest_keeps_only_public_release_material():
@@ -186,7 +166,7 @@ def test_source_distribution_manifest_keeps_only_public_release_material():
 
     for excluded in ("exclude AGENTS.md", "exclude CONTRIBUTING.md", "prune docs"):
         assert excluded in manifest
-    assert "prune legacy-pypi-shim" in manifest
+    assert "legacy-pypi-shim" not in manifest
 
 
 def test_pypi_trusted_publisher_isolated_to_release_workflow():
@@ -215,3 +195,13 @@ def test_testpypi_workflow_uses_oidc_and_verifies_the_published_package():
     )
     assert "TWINE_PASSWORD" not in workflow
     assert "PYPI_API_TOKEN" not in workflow
+
+
+def test_no_legacy_package_surfaces_remain():
+    for path in (
+        Path("legacy-pypi-shim"),
+        Path("llm_bench"),
+        Path(".github/workflows/publish-legacy-shim.yml"),
+        Path("docs/migrating-to-llm-preflight.md"),
+    ):
+        assert not path.exists()
