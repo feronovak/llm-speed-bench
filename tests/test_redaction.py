@@ -67,3 +67,9 @@ def test_redact_secrets_replaces_bare_openai_style_keys():
     redacted = redact_secrets("error: invalid key sk-abc123SECRET")
 
     assert redacted == "error: invalid key [REDACTED]"
+
+
+def test_redact_secrets_replaces_gemini_and_xai_style_keys():
+    value = "AIza" + "a" * 35 + " and xai-" + "b" * 24
+
+    assert redact_secrets(value) == "[REDACTED] and [REDACTED]"

@@ -18,7 +18,12 @@ from .client import create_client
 from .metrics import summarize
 from .presets import expand_presets
 from .pricing import pricing_freshness_report
-from .profiles import evaluate_response, normalize_profile_selector, select_profiles
+from .profiles import (
+    PROFILE_ALIASES,
+    evaluate_response,
+    normalize_profile_selector,
+    select_profiles,
+)
 from .redaction import redact_secrets
 
 
@@ -187,6 +192,8 @@ def _validation_evaluator(validation: dict[str, Any]) -> dict[str, Any]:
         return {"type": "regex", "regex": validation["regex"]}
     if "contains" in validation:
         return {"type": "contains", "contains": validation["contains"]}
+    if "exact" in validation:
+        return {"type": "exact", "expected": validation["exact"]}
     return {"type": "nonempty"}
 
 
@@ -215,6 +222,15 @@ def select_test_profiles(config: dict[str, Any], selector: str) -> list[dict[str
     requested = normalize_profile_selector(selector).split(",")
     builtins_all = select_profiles("all")
     builtin_names = [profile["name"] for profile in builtins_all]
+    prompt_names = [prompt["name"] for prompt in config.get("prompts", [])]
+    duplicates = sorted({name for name in prompt_names if prompt_names.count(name) > 1})
+    collisions = sorted(set(prompt_names) & set(builtin_names))
+    if duplicates:
+        raise ValueError(f"duplicate custom prompt names: {', '.join(duplicates)}")
+    if collisions:
+        raise ValueError(
+            f"custom prompt names collide with built-in profiles: {', '.join(collisions)}"
+        )
     custom_profiles = {
         prompt["name"]: custom_prompt_profile(prompt)
         for prompt in config.get("prompts", [])
@@ -240,7 +256,9 @@ def _validate(sample: dict[str, Any], validation: dict[str, Any]) -> None:
     response = sample["response"]
     sample["valid_output"] = True
     sample["evaluation_error"] = None
-    if "contains" in validation and validation["contains"] not in response:
+    if "contains" in validation and (
+        not validation["contains"] or validation["contains"] not in response
+    ):
         sample["valid_output"] = False
         sample["evaluation_error"] = (
             f"response did not contain {validation['contains']!r}"
@@ -250,6 +268,11 @@ def _validate(sample: dict[str, Any], validation: dict[str, Any]) -> None:
         sample["evaluation_error"] = (
             f"response did not match regex {validation['regex']!r}"
         )
+    if "exact" in validation and (
+        response.strip().casefold() != str(validation["exact"]).strip().casefold()
+    ):
+        sample["valid_output"] = False
+        sample["evaluation_error"] = "exact match failed"
     if "json_schema" in validation:
         evaluation = evaluate_response(
             response, {"type": "json_schema", "schema": validation["json_schema"]}
@@ -258,6 +281,94 @@ def _validate(sample: dict[str, Any], validation: dict[str, Any]) -> None:
             sample["valid_output"] = False
             sample["evaluation_error"] = evaluation["error"]
     _add_response_preview(sample)
+
+
+def validate_config_validations(config: dict[str, Any]) -> None:
+    """Reject unsupported validation keys before planning or spending requests."""
+
+    def validate_rules(validation: Any, location: str) -> None:
+        if validation is None:
+            return
+        if not isinstance(validation, dict):
+            raise ValueError(f"{location} must be an object")
+        allowed = {"contains", "regex", "json_schema", "exact"}
+        unknown = sorted(set(validation) - allowed)
+        if unknown:
+            raise ValueError(f"unknown validation keys: {', '.join(unknown)}")
+        if "contains" in validation and (
+            not isinstance(validation["contains"], str) or not validation["contains"]
+        ):
+            raise ValueError(f"{location}.contains must be a non-empty string")
+
+    validate_rules(config.get("validation", {}), "validation")
+    for prompt_config in config.get("prompts", []):
+        validate_rules(
+            prompt_config.get("validation", {}),
+            f"validation for prompt {prompt_config.get('name', '<unnamed>')}",
+        )
+    prompt_names = [prompt.get("name") for prompt in config.get("prompts", [])]
+    duplicates = sorted(
+        {
+            str(name)
+            for name in prompt_names
+            if name is not None and prompt_names.count(name) > 1
+        }
+    )
+    if duplicates:
+        raise ValueError(f"duplicate custom prompt names: {', '.join(duplicates)}")
+    builtin_names = {profile["name"] for profile in select_profiles("all")}
+    builtin_names.update(PROFILE_ALIASES)
+    collisions = sorted(str(name) for name in prompt_names if name in builtin_names)
+    if collisions:
+        raise ValueError(
+            "custom prompt names collide with built-in profiles: "
+            + ", ".join(collisions)
+        )
+
+
+def _request_exception_sample(exc: Exception) -> dict[str, Any]:
+    error = str(exc)
+    category = (
+        "network"
+        if any(
+            token in error.casefold()
+            for token in ("resolve", "network", "connection", "timeout")
+        )
+        else "provider_error"
+    )
+    return {
+        "ok": False,
+        "latency_seconds": 0.0,
+        "ttft_seconds": None,
+        "output_tokens_per_second": None,
+        "input_tokens": None,
+        "output_tokens": None,
+        "response_chars": 0,
+        "response": "",
+        "error": error,
+        "attempts": 1,
+        "retry_count": 0,
+        "retry_reasons": [],
+        "failure_category": category,
+    }
+
+
+def _safe_client_run(
+    client: Any, prompt: str, options: dict[str, Any]
+) -> dict[str, Any]:
+    try:
+        return client.run(prompt, options)
+    except Exception as exc:
+        return _request_exception_sample(exc)
+
+
+class _UnavailableClient:
+    def __init__(self, model: dict[str, Any], error: Exception):
+        self.model = {"base_url": model.get("base_url")}
+        self.error = error
+
+    def run(self, _prompt: str, _options: dict[str, Any]) -> dict[str, Any]:
+        return _request_exception_sample(self.error)
 
 
 def _execute(
@@ -270,7 +381,10 @@ def _execute(
     samples: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
         futures = {
-            pool.submit(client.run, case["prompt"], options): (case, level)
+            pool.submit(_safe_client_run, client, case["prompt"], options): (
+                case,
+                level,
+            )
             for case, options, level in jobs
         }
         for future in as_completed(futures):
@@ -362,7 +476,9 @@ def _run_profiles(
         if profile.get("system_prompt"):
             options["system_prompt"] = profile["system_prompt"]
         for _ in range(warmups):
-            warmup_samples.append(client.run(profile["cases"][0]["prompt"], options))
+            warmup_samples.append(
+                _safe_client_run(client, profile["cases"][0]["prompt"], options)
+            )
 
         if "concurrency_levels" in profile:
             samples = []
@@ -470,6 +586,7 @@ def run_benchmark(
     profile_selector: str | None = None,
     progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
+    validate_config_validations(config)
     repetitions = int(config.get("repetitions", 5))
     warmups = int(config.get("warmups", 1))
     concurrency = int(config.get("concurrency", 1))
@@ -513,7 +630,11 @@ def run_benchmark(
                     "request_total": request_total,
                 }
             )
-        client = create_client(model, timeout)
+        client: Any
+        try:
+            client = create_client(model, timeout)
+        except (OSError, ValueError) as exc:
+            client = _UnavailableClient(model, exc)
         warmup_samples: list[dict[str, Any]] = []
         completed_requests = 0
 
@@ -564,11 +685,11 @@ def run_benchmark(
             ]
         else:
             for _ in range(warmups):
-                warmup_samples.append(client.run(prompt, request_options))
+                warmup_samples.append(_safe_client_run(client, prompt, request_options))
             samples = []
             with ThreadPoolExecutor(max_workers=concurrency) as pool:
                 futures = [
-                    pool.submit(client.run, prompt, request_options)
+                    pool.submit(_safe_client_run, client, prompt, request_options)
                     for _ in range(repetitions)
                 ]
                 for future in as_completed(futures):
@@ -777,7 +898,13 @@ def _executive_summary(result: dict[str, Any]) -> list[str]:
         min_latency = min(item["latency"] for item in value_candidates)
         min_cost = min(item["cost"] for item in value_candidates)
         for item in value_candidates:
-            speed = min_latency / item["latency"]
+            speed = (
+                1.0
+                if item["latency"] == 0
+                else min_latency / item["latency"]
+                if min_latency > 0
+                else 0.0
+            )
             cost = min_cost / item["cost"] if item["cost"] else 1.0
             item["value_score"] = (item["reliability"] + speed + cost) / 3
         best = max(value_candidates, key=lambda item: item["value_score"])
@@ -836,18 +963,13 @@ def _failed_tests(model: dict[str, Any]) -> str:
         return ", ".join(failure_reasons)
     if model.get("summary", {}).get("failed", 0):
         return "request failed"
+    if model_has_test_failure(model):
+        return "config prompt"
     return "-"
 
 
 def _model_passed(model: dict[str, Any]) -> bool:
-    profiles = model.get("profiles", [])
-    if profiles:
-        return all(
-            profile["summary"].get("failed", 0) == 0
-            and profile["summary"].get("valid_output_rate", 1) == 1
-            for profile in profiles
-        )
-    return model.get("summary", {}).get("failed", 0) == 0
+    return not model_failed(model)
 
 
 def _pass_fail_rows(result: dict[str, Any]) -> list[list[str]]:
@@ -1014,7 +1136,7 @@ def console_report(result: dict[str, Any], color: bool = False) -> str:
     else:
         headers = [
             "Model",
-            "Success",
+            "Valid",
             "Latency p50",
             "Latency p95",
             "TTFT p50",
@@ -1028,7 +1150,7 @@ def console_report(result: dict[str, Any], color: bool = False) -> str:
             rows.append(
                 [
                     model["name"],
-                    f"{summary['success_rate']:.0%}",
+                    f"{summary.get('valid_output_rate', summary['success_rate']):.0%}",
                     format_seconds(summary["latency_seconds"]["p50"]),
                     format_seconds(summary["latency_seconds"]["p95"]),
                     format_seconds(summary["ttft_seconds"]["p50"]),
@@ -1036,7 +1158,7 @@ def console_report(result: dict[str, Any], color: bool = False) -> str:
                     "n/a" if cost is None else f"${cost:.6f}",
                 ]
             )
-            statuses.append(summary["success_rate"])
+            statuses.append(summary.get("valid_output_rate", summary["success_rate"]))
 
     colors = None
     if color:

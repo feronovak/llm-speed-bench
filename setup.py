@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="llm-speed-bench",
-    version="1.2.1",
+    version="1.2.2",
     description="Local smoke tests for live LLM models, latency, and cost",
     packages=find_packages(include=["llm_bench", "llm_bench.*"]),
     python_requires=">=3.10",

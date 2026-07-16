@@ -33,6 +33,14 @@ def test_catalog_classification_prefers_metadata_and_is_conservative(model, expe
     assert (classified["catalog_type"], classified["catalog_confidence"]) == expected
 
 
+def test_catalog_ready_text_metadata_beats_a_misleading_model_name():
+    classified = classify_catalog_model(
+        {"model": "claude-omni-text", "capabilities": {"text_generation": "ready"}}
+    )
+
+    assert classified["catalog_type"] == "text-ready"
+
+
 def test_anthropic_catalog_preserves_official_capabilities(monkeypatch):
     monkeypatch.setattr(
         "llm_bench.catalog._get_json",
@@ -319,3 +327,22 @@ def test_catalog_rejects_non_http_base_url_before_opening(monkeypatch):
             }
         )
     assert opened is False
+
+
+def test_openrouter_encodes_list_query_values_as_repeated_parameters(monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        "llm_bench.catalog._get_json",
+        lambda url, *_args, **_kwargs: captured.append(url) or {"data": []},
+    )
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+
+    discover_models(
+        {
+            "provider": "openrouter",
+            "output_modalities": ["text", "image"],
+            "limit": 1,
+        }
+    )
+
+    assert "output_modalities=text&output_modalities=image" in captured[0]

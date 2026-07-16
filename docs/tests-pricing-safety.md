@@ -28,8 +28,15 @@ repetitions for meaningful latency comparison.
 
 Retryable rate limits, selected 5xx responses, temporary network failures, and
 timeouts retry once by default. Configure `request.retry` to change attempts,
-backoff, and bounded jitter. Plans show nominal work and the retry-expanded
-cost ceiling; results record retry counts and final failure categories.
+backoff, and bounded jitter. Plans include every selected profile case, warmup,
+request override, and retry-expanded cost ceiling; results record retry counts
+and final failure categories. Latency and TTFT for a successful request measure
+its final network attempt, not prior retry backoff; retry counts remain visible
+so a fast recovered request is not mistaken for an uninterrupted one. Malformed
+provider responses are deterministic failures and are not retried.
+Socket-level connection failures are retried according to `retry_on: network`;
+the classification uses the transport exception rather than provider-specific
+error wording.
 
 A catalogue probe is different from a benchmark: it sends one minimal request
 only after explicit confirmation, to establish whether a selected text candidate

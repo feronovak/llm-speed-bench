@@ -38,6 +38,11 @@ otherwise exits 0. This two-command form keeps each stdout stream valid JSON.
 human-readable after the result JSON. Prefer the two-command form when another
 CI step parses stdout.
 
+The CI comparison fails for a latency increase, a request-success or validation
+rate drop, or a cost increase beyond its configured threshold. Costs are
+compared only when both result files contain a known estimate; retain
+`max_estimated_cost_usd` as the separate hard spend ceiling before a run.
+
 ## Safe CI starter
 
 ```bash

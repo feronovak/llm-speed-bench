@@ -45,13 +45,19 @@ def test_reasoning_prompts_request_numeric_only_answers():
         assert "explanation" in case["prompt"]
 
 
-def test_numeric_answer_evaluator_accepts_a_correct_explained_answer():
+def test_numeric_answer_evaluator_rejects_explanation_even_when_it_mentions_answer():
     result = evaluate_response(
         "The new price is 100.",
         {"type": "numeric_answer", "expected": 100, "tolerance": 0},
     )
 
-    assert result["valid"] is True
+    assert result["valid"] is False
+
+
+def test_contains_evaluator_rejects_an_empty_expected_value():
+    result = evaluate_response("anything", {"type": "contains", "contains": ""})
+
+    assert result["valid"] is False
 
 
 @pytest.mark.parametrize(

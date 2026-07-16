@@ -12,6 +12,7 @@ from llm_bench.runner import (
     run_benchmark,
     save_result,
     select_custom_prompt,
+    validate_config_validations,
 )
 
 
@@ -39,6 +40,21 @@ def test_load_config_accepts_named_prompts_without_legacy_prompt(tmp_path):
     )
 
     assert load_config(path)["prompts"][0]["name"] == "csv-review"
+
+
+def test_config_rejects_empty_contains_and_builtin_prompt_name_collisions():
+    with pytest.raises(ValueError, match="contains must be a non-empty string"):
+        validate_config_validations({"validation": {"contains": ""}})
+
+    with pytest.raises(ValueError, match="collide with built-in"):
+        validate_config_validations(
+            {"prompts": [{"name": "quick-migration-check", "prompt": "hello"}]}
+        )
+
+    with pytest.raises(ValueError, match="collide with built-in"):
+        validate_config_validations(
+            {"prompts": [{"name": "reasoning", "prompt": "hello"}]}
+        )
 
 
 def test_load_config_accepts_model_alias_strings(tmp_path):
@@ -145,6 +161,107 @@ def test_report_handles_missing_usage():
     rendered = report(result)
     assert "Prompt: **csv-review** (`1234567890ab`)" in rendered
     assert "| model-a | 100% | 1.000s | 2.000s | n/a | n/a | n/a |" in rendered
+
+
+def test_plain_prompt_validation_failure_cannot_pass_or_be_recommended():
+    result = run_benchmark(
+        {
+            "name": "plain-validation",
+            "prompt": "Reply with ok.",
+            "validation": {"contains": "required"},
+            "models": [
+                {
+                    "name": "invalid-but-fast",
+                    "provider": "mock",
+                    "model": "local",
+                    "response": "wrong",
+                    "input_cost_per_million": 1,
+                    "output_cost_per_million": 1,
+                }
+            ],
+            "repetitions": 1,
+            "warmups": 0,
+        }
+    )
+
+    summary = result["models"][0]["summary"]
+    assert summary["valid_output_rate"] == 0
+    rendered = console_report(result)
+    assert "invalid-but-fast" in rendered
+    assert "FAIL" in rendered
+    assert "| invalid-but-fast | FAIL | config prompt |" in report(result)
+    assert (
+        "Recommended: unavailable; no priced model passed every selected test."
+        in rendered
+    )
+    assert (
+        "Excluded from recommendations: **invalid-but-fast** (failed: config prompt)."
+        in report(result)
+    )
+
+
+def test_plain_prompt_supports_exact_validation_and_rejects_unknown_rules():
+    result = run_benchmark(
+        {
+            "prompt": "Reply with ok.",
+            "validation": {"exact": "ok"},
+            "models": [{"provider": "mock", "model": "local", "response": "not ok"}],
+            "repetitions": 1,
+            "warmups": 0,
+        }
+    )
+    assert result["models"][0]["samples"][0]["valid_output"] is False
+
+    with pytest.raises(ValueError, match="unknown validation keys: expected"):
+        run_benchmark(
+            {
+                "prompt": "Reply with ok.",
+                "validation": {"expected": "ok"},
+                "models": [{"provider": "mock", "model": "local"}],
+            }
+        )
+
+
+def test_unexpected_per_model_request_exception_is_saved_as_api_failure(monkeypatch):
+    class Client:
+        model = {"base_url": "https://example.test"}
+
+        def __init__(self, fail):
+            self.fail = fail
+
+        def run(self, _prompt, _options):
+            if self.fail:
+                raise ValueError("host could not be resolved")
+            return {
+                "ok": True,
+                "latency_seconds": 1,
+                "ttft_seconds": 0.1,
+                "output_tokens_per_second": 1,
+                "input_tokens": 1,
+                "output_tokens": 1,
+                "response_chars": 2,
+                "response": "ok",
+                "error": None,
+            }
+
+    monkeypatch.setattr(
+        "llm_bench.runner.create_client",
+        lambda model, _timeout: Client(model["model"] == "broken"),
+    )
+    result = run_benchmark(
+        {
+            "prompt": "Reply with ok.",
+            "models": [
+                {"provider": "openai", "model": "working"},
+                {"provider": "openai", "model": "broken"},
+            ],
+            "repetitions": 1,
+            "warmups": 0,
+        }
+    )
+
+    assert [model["summary"]["failed"] for model in result["models"]] == [0, 1]
+    assert result["models"][1]["samples"][0]["failure_category"] == "network"
 
 
 def test_profile_run_groups_quality_and_operational_metrics(monkeypatch):
@@ -1225,3 +1342,30 @@ def test_save_result_redacts_secret_values_from_artifacts(tmp_path):
         json_path.with_suffix(".summary.md"),
     ]:
         assert "saved-redaction-secret" not in path.read_text()
+
+
+def test_executive_summary_handles_zero_latency_mock_results():
+    result = {
+        "benchmark": "mock",
+        "run_id": "zero",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "prompt_sha256": "0123456789abcdef",
+        "models": [
+            {
+                "name": "instant",
+                "summary": {
+                    "requests": 1,
+                    "successful": 1,
+                    "failed": 0,
+                    "success_rate": 1,
+                    "valid_output_rate": 1,
+                    "latency_seconds": {"mean": 0.0, "p50": 0.0, "p95": 0.0},
+                    "ttft_seconds": {"p50": 0.0},
+                    "output_tokens_per_second": {"p50": None},
+                    "estimated_cost_usd": 0.001,
+                },
+            }
+        ],
+    }
+
+    assert "- Best value: **instant**" in report(result)

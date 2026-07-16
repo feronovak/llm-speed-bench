@@ -20,7 +20,7 @@ def test_interactive_selection_accepts_providers_families_profiles_and_repetitio
         {"provider": "openrouter", "model": "deepseek/deepseek-v4-pro"},
     ]
     monkeypatch.setattr("llm_bench.cli.resolve_models", lambda config: models)
-    answers = iter(["openai,openrouter/qwen", "1,4", "2", "y"])
+    answers = iter(["openai,openrouter/qwen", "1,4", "2", "", "y"])
 
     selected = interactive_selection(
         {"prompt": "test", "models": models, "repetitions": 5},
@@ -45,7 +45,7 @@ def test_interactive_selection_can_cancel(monkeypatch):
         "llm_bench.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
-    answers = iter(["all", "", "", "n"])
+    answers = iter(["all", "", "", "", "n"])
 
     selected = interactive_selection(
         {"prompt": "test", "models": [{"model": "gpt-5.5"}]},
@@ -81,7 +81,7 @@ def test_interactive_selection_clears_screen_at_start(monkeypatch):
         "llm_bench.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
-    answers = iter(["all", "", "", "n"])
+    answers = iter(["all", "", "", "", "n"])
     cleared = []
 
     interactive_selection(
@@ -100,7 +100,7 @@ def test_interactive_selection_can_color_distinct_sections(monkeypatch):
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
-    answers = iter(["all", "", "", "n"])
+    answers = iter(["all", "", "", "", "n"])
 
     interactive_selection(
         {"prompt": "test", "models": [{"model": "gpt-5.5"}]},
@@ -122,7 +122,7 @@ def test_interactive_selection_separates_repetitions_section(monkeypatch):
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
-    answers = iter(["all", "", "", "n"])
+    answers = iter(["all", "", "", "", "n"])
 
     interactive_selection(
         {"prompt": "test", "models": [{"model": "gpt-5.5"}]},
@@ -140,7 +140,7 @@ def test_interactive_selection_lists_and_selects_named_custom_prompt(monkeypatch
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
-    answers = iter(["all", "csv-review", "", "y"])
+    answers = iter(["all", "csv-review", "", "", "y"])
 
     selected = interactive_selection(
         {
@@ -169,7 +169,7 @@ def test_interactive_selection_numbers_custom_prompts_after_builtin_profiles(
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
-    answers = iter(["all", "1,6,7", "1", "y"])
+    answers = iter(["all", "1,6,7", "1", "", "y"])
 
     selected = interactive_selection(
         {
@@ -440,7 +440,7 @@ def test_interactive_selection_shows_request_and_cost_estimate(monkeypatch):
     ]
     monkeypatch.setattr("llm_bench.cli.resolve_models", lambda config: models)
     output = []
-    answers = iter(["all", "", "2", "n"])
+    answers = iter(["all", "", "2", "", "n"])
 
     interactive_selection(
         {
@@ -463,7 +463,7 @@ def test_interactive_selection_explains_functional_tests_request_breakdown(monke
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
-    answers = iter(["all", "all", "1", "n"])
+    answers = iter(["all", "all", "1", "", "n"])
 
     interactive_selection(
         {"prompt": "test", "models": [{"model": "gpt-5.5"}], "warmups": 0},
@@ -484,7 +484,7 @@ def test_interactive_selection_shows_colored_run_plan_and_status_meaning(monkeyp
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
-    answers = iter(["all", "1", "1", "n"])
+    answers = iter(["all", "1", "1", "", "n"])
 
     interactive_selection(
         {"prompt": "test", "models": [{"model": "gpt-5.5"}], "warmups": 0},
@@ -511,7 +511,7 @@ def test_interactive_selection_visually_separates_each_stage(monkeypatch):
         lambda config: [{"provider": "mock", "model": "local"}],
     )
     output = []
-    answers = iter(["all", "", "", "n"])
+    answers = iter(["all", "", "", "", "n"])
 
     interactive_selection(
         {"prompt": "test", "models": [{"model": "local"}]},
@@ -551,7 +551,7 @@ def test_interactive_selection_defaults_to_failed_response_retention(monkeypatch
         "llm_bench.cli.resolve_models",
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
-    answers = iter(["all", "", "", "y"])
+    answers = iter(["all", "", "", "", "y"])
 
     selected = interactive_selection(
         {"prompt": "test", "models": [{"model": "gpt-5.5"}]},
@@ -727,6 +727,46 @@ def test_watch_new_initializes_then_reports_new_models(monkeypatch, tmp_path, ca
     )
     cli.main()
     assert json.loads(capsys.readouterr().out)["diff"]["added"][0]["model"] == "new"
+
+
+def test_first_watch_test_runs_discovered_models_and_bootstraps_snapshot(
+    monkeypatch, tmp_path
+):
+    watch = tmp_path / "watch.json"
+    watch.write_text('{"prompt":"hello","models":[{"model":"old"}]}')
+    approved = tmp_path / "approved.json"
+    approved.write_text('{"models": []}')
+    snapshot = tmp_path / "snapshot.json"
+    captured = []
+    monkeypatch.setattr(
+        cli, "resolve_models", lambda _value: [{"provider": "openai", "model": "new"}]
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_benchmark",
+        lambda config, **_kwargs: captured.append(config) or {"models": []},
+    )
+    monkeypatch.setattr(cli, "console_report", lambda _result: "done")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "watch-new",
+            str(watch),
+            "--against",
+            str(approved),
+            "--snapshot",
+            str(snapshot),
+            "--test",
+            "--no-save",
+        ],
+    )
+
+    cli.main()
+
+    assert captured[0]["models"] == [{"provider": "openai", "model": "new"}]
+    assert json.loads(snapshot.read_text())["models"][0]["model"] == "new"
 
 
 def test_catalog_refresh_uses_the_catalog_command_family(monkeypatch, tmp_path, capsys):
@@ -989,6 +1029,89 @@ def test_watch_new_writes_a_regular_candidate_benchmark_config(monkeypatch, tmp_
     ]
 
 
+def test_watch_new_candidate_config_does_not_persist_inherited_headers(
+    monkeypatch, tmp_path
+):
+    watch = tmp_path / "watch.json"
+    watch.write_text('{"prompt":"hello","models":[{"model":"old"}]}')
+    approved = tmp_path / "approved.json"
+    approved.write_text('{"models":[]}')
+    output = tmp_path / "candidates.json"
+    monkeypatch.setattr(
+        cli,
+        "resolve_models",
+        lambda value: [
+            {
+                "provider": "openai",
+                "model": "new",
+                "headers": {"Authorization": "Bearer secret"},
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "watch-new",
+            str(watch),
+            "--against",
+            str(approved),
+            "--all-unapproved",
+            "--write-config",
+            str(output),
+        ],
+    )
+
+    cli.main()
+
+    assert "secret" not in output.read_text()
+    assert "headers" not in json.loads(output.read_text())["models"][0]
+
+
+def test_watch_new_failed_candidate_run_does_not_advance_snapshot(
+    monkeypatch, tmp_path
+):
+    watch = tmp_path / "watch.json"
+    watch.write_text('{"prompt":"hello","models":[]}')
+    approved = tmp_path / "approved.json"
+    approved.write_text('{"models":[]}')
+    snapshot = tmp_path / "snapshot.json"
+    snapshot.write_text(
+        json.dumps({"models": [{"provider": "openai", "model": "old"}]})
+    )
+    monkeypatch.setattr(
+        cli, "resolve_models", lambda value: [{"provider": "openai", "model": "new"}]
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_benchmark",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("failed")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-bench",
+            "watch-new",
+            str(watch),
+            "--snapshot",
+            str(snapshot),
+            "--against",
+            str(approved),
+            "--test",
+            "--no-save",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        cli.main()
+
+    assert json.loads(snapshot.read_text())["models"] == [
+        {"provider": "openai", "model": "old"}
+    ]
+
+
 def test_watch_new_can_write_all_currently_unapproved_models(monkeypatch, tmp_path):
     watch = tmp_path / "watch.json"
     watch.write_text('{"prompt":"hello","models":[{"model":"old"}]}')
@@ -1067,8 +1190,10 @@ def test_interactive_watch_reviews_unapproved_models_on_first_snapshot(
     selected = []
     monkeypatch.setattr(
         cli,
-        "interactive_selection",
-        lambda config, **kwargs: selected.append(config) or None,
+        "interactive_watch_selection",
+        lambda watch, approved, candidates: (
+            selected.append((watch, approved, candidates)) or None
+        ),
     )
     monkeypatch.setattr(
         sys,
@@ -1088,11 +1213,11 @@ def test_interactive_watch_reviews_unapproved_models_on_first_snapshot(
     cli.main()
 
     assert selected == [
-        {
-            "prompt": "hello",
-            "models": [{"provider": "openai", "model": "new"}],
-            "discovery": [],
-        }
+        (
+            {"prompt": "hello", "models": [{"model": "old"}]},
+            {"models": [{"provider": "openai", "model": "old"}]},
+            [{"provider": "openai", "model": "new"}],
+        )
     ]
     assert (
         "Catalog refreshed: 2 discovered; 1 approved; 1 available for review."
@@ -1112,7 +1237,7 @@ def test_watch_new_interrupt_exits_cleanly(monkeypatch, tmp_path, capsys):
     )
     monkeypatch.setattr(
         cli,
-        "interactive_selection",
+        "interactive_watch_selection",
         lambda *args, **kwargs: (_ for _ in ()).throw(KeyboardInterrupt),
     )
     monkeypatch.setattr(
@@ -1233,6 +1358,39 @@ def test_interactive_watch_selection_keeps_explicit_candidate_and_incumbent_choi
     assert "=== Models to try ===" in output
     assert "=== Your current models ===" in output
     assert "These are not changed; they are only used for comparison." in output
+
+
+def test_interactive_watch_all_excludes_the_paid_concurrency_profile():
+    answers = iter(["1", "", "all", "y"])
+    selected = cli.interactive_watch_selection(
+        {"prompt": "hello"},
+        {"models": []},
+        [{"provider": "openai", "model": "candidate"}],
+        input_fn=lambda _prompt: next(answers),
+        output_fn=lambda _text: None,
+    )
+
+    assert selected is not None
+    assert selected[1] == (
+        "quick-migration-check,exact-routing-check,structured-output-check,"
+        "numeric-instruction-check"
+    )
+
+
+def test_interactive_final_stage_keeps_head_to_head_models_and_requires_confirmation():
+    answers = iter(["", "", "n"])
+    selected = cli.interactive_selection(
+        {"prompt": "hello", "models": [{"provider": "openai", "model": "old"}]},
+        input_fn=lambda _prompt: next(answers),
+        output_fn=lambda _text: None,
+        selected_models=[
+            {"provider": "openai", "model": "old"},
+            {"provider": "openai", "model": "candidate"},
+        ],
+        selected_profile_selector="",
+    )
+
+    assert selected is None
 
 
 def test_interactive_budget_requires_explicit_retry_risk_confirmation():

@@ -19,6 +19,8 @@ _SECRET_TEXT_PATTERNS: list[tuple[re.Pattern[str], int | None]] = [
     (re.compile(r"(?i)(authorization\s*:?\s*bearer\s+)([A-Za-z0-9._:/+=-]+)"), 1),
     (re.compile(r"(?i)(x-api-key\s*:?\s*)([A-Za-z0-9._:/+=-]+)"), 1),
     (re.compile(r"\bsk-[A-Za-z0-9._-]+\b"), None),
+    (re.compile(r"\bAIza[A-Za-z0-9_-]{20,}\b"), None),
+    (re.compile(r"\bxai-[A-Za-z0-9_-]{16,}\b"), None),
 ]
 
 

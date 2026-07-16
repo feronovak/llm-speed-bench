@@ -49,6 +49,28 @@ def test_factory_applies_openai_defaults():
     assert "max_tokens" not in body
 
 
+def test_runtime_url_validation_failure_becomes_a_normal_api_failure(monkeypatch):
+    client = OpenAICompatibleClient(
+        {
+            "provider": "openai_compatible",
+            "model": "broken",
+            "base_url": "https://api.example.test/v1",
+        },
+        10,
+    )
+    monkeypatch.setattr(
+        "llm_bench.client.require_http_url",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ValueError("URL host could not be resolved: 'api.example.test'")
+        ),
+    )
+
+    result = client.run("Reply with ok.", {"retry": {"max_attempts": 1}})
+
+    assert result["ok"] is False
+    assert result["failure_category"] == "provider_error"
+
+
 @pytest.mark.parametrize(
     "model", ["gpt-5.5", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
 )
@@ -481,3 +503,166 @@ def test_retry_delay_adds_bounded_jitter(monkeypatch):
     )
 
     assert delay == 0.625
+
+
+def test_openai_compatible_provider_options_are_not_sent_as_a_bogus_field():
+    client = create_client(
+        {
+            "provider": "openai_compatible",
+            "model": "local",
+            "base_url": "https://example.test/v1",
+        },
+        10,
+    )
+
+    body = client.body(
+        "hello", {"provider_options": {"openai_compatible": {"seed": 7}}}
+    )
+
+    assert body["seed"] == 7
+    assert "openai_compatible" not in body
+
+
+def test_gemini_honors_explicit_temperature_capability_override():
+    client = create_client(
+        {"provider": "gemini", "model": "gemini-test", "supports_temperature": False},
+        10,
+    )
+
+    assert (
+        "temperature"
+        not in client.body("hello", {"temperature": 0.2})["generationConfig"]
+    )
+
+
+def test_statusless_malformed_stream_is_not_retried(monkeypatch):
+    calls = 0
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def __iter__(self):
+            return iter([b"data: not-json\n"])
+
+    def bad_stream(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return FakeResponse()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setattr("urllib.request.urlopen", bad_stream)
+    sample = create_client({"provider": "openai", "model": "model-a"}, 10).run(
+        "hello", {"retry": {"max_attempts": 3, "initial_delay_seconds": 0}}
+    )
+
+    assert calls == 1
+    assert sample["failure_category"] == "provider_error"
+
+
+def test_openai_responses_honors_retry_configuration(monkeypatch):
+    calls = 0
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self, *_args):
+            return b'{"output_text":"ok","usage":{}}'
+
+    def flaky(request, timeout):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise urllib.error.HTTPError(
+                request.full_url, 429, "rate", {}, io.BytesIO(b"rate limited")
+            )
+        return FakeResponse()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setattr("urllib.request.urlopen", flaky)
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    sample = create_client(
+        {"provider": "openai", "model": "model-a", "adapter": "openai_responses"}, 10
+    ).run("hello", {"retry": {"max_attempts": 2, "initial_delay_seconds": 0}})
+
+    assert calls == 2
+    assert sample["retry_reasons"] == ["rate_limit"]
+
+
+def test_success_latency_excludes_previous_retry_and_backoff(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def __iter__(self):
+            return iter(
+                [
+                    b'data: {"choices":[{"delta":{"content":"ok"}}]}\n',
+                    b"data: [DONE]\n",
+                ]
+            )
+
+    calls = 0
+
+    def flaky(request, timeout):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise urllib.error.HTTPError(
+                request.full_url, 429, "rate", {}, io.BytesIO()
+            )
+        return FakeResponse()
+
+    timestamps = iter([0.0, 1.0, 10.0, 12.0, 15.0])
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setattr("urllib.request.urlopen", flaky)
+    monkeypatch.setattr("llm_bench.client.time.perf_counter", lambda: next(timestamps))
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+
+    sample = create_client({"provider": "openai", "model": "model-a"}, 10).run(
+        "hello", {"retry": {"max_attempts": 2, "initial_delay_seconds": 1}}
+    )
+
+    assert sample["latency_seconds"] == 5.0
+    assert sample["ttft_seconds"] == 2.0
+
+
+def test_transient_socket_errors_are_retried_by_exception_type(monkeypatch):
+    calls = 0
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def __iter__(self):
+            return iter([b'data: {"choices":[{"delta":{"content":"ok"}}]}\n'])
+
+    def flaky(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ConnectionRefusedError("Connection refused")
+        return FakeResponse()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setattr("urllib.request.urlopen", flaky)
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    sample = create_client({"provider": "openai", "model": "model-a"}, 10).run(
+        "hello", {"retry": {"max_attempts": 2, "initial_delay_seconds": 0}}
+    )
+
+    assert calls == 2
+    assert sample["retry_reasons"] == ["network"]

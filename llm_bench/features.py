@@ -4,13 +4,13 @@ import copy
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .catalog import resolve_models
 from .client import PROVIDER_DEFAULTS
 from .pricing import pricing_freshness_report
 from .presets import SUPPORTED_PRESETS, expand_presets
-from .runner import _profile_request_count
+from .runner import _profile_request_count, select_test_profiles
 
 
 def apply_smoke_mode(config: dict[str, Any]) -> dict[str, Any]:
@@ -113,8 +113,8 @@ def _request_count(config: dict[str, Any], models: list[dict[str, Any]]) -> int:
     return len(models) * (per_model + warmups_per_model)
 
 
-def _retry_max_attempts(config: dict[str, Any]) -> int:
-    retry = config.get("request", {}).get("retry", {})
+def _retry_max_attempts(request: dict[str, Any]) -> int:
+    retry = request.get("retry", {})
     if retry is True:
         retry = {}
     if not isinstance(retry, dict):
@@ -122,44 +122,113 @@ def _retry_max_attempts(config: dict[str, Any]) -> int:
     return max(1, int(retry.get("max_attempts", 2)))
 
 
+def _budget_work(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """Return every nominal request shape, including warmups, for cost safety."""
+    request = dict(config.get("request", {}))
+    warmups = int(config.get("warmups", 1))
+    selector = config.get("profiles")
+    if not selector:
+        return [(config.get("prompt", ""), request)] * (
+            int(config.get("repetitions", 5)) + warmups
+        )
+
+    work: list[tuple[str, dict[str, Any]]] = []
+    repetitions = int(config.get("suite_repetitions", 1))
+    for profile in select_test_profiles(config, str(selector)):
+        options = dict(request)
+        profile_request = dict(profile.get("request", {}))
+        if profile.get("presets"):
+            profile_request = expand_presets(profile_request, profile["presets"])
+        options.update(profile_request)
+        if profile.get("system_prompt"):
+            options["system_prompt"] = profile["system_prompt"]
+        work.extend([(profile["cases"][0]["prompt"], options)] * warmups)
+        if "concurrency_levels" in profile:
+            for level in profile["concurrency_levels"]:
+                work.extend(
+                    (
+                        profile["cases"][index % len(profile["cases"])]["prompt"],
+                        options,
+                    )
+                    for index in range(max(repetitions, level))
+                )
+        else:
+            work.extend(
+                (case["prompt"], options)
+                for case in profile["cases"]
+                for _ in range(repetitions)
+            )
+    return work
+
+
+def _request_cost(
+    model: dict[str, Any], prompt: str, options: dict[str, Any]
+) -> float | None:
+    input_price = model.get("input_cost_per_million")
+    output_price = model.get("output_cost_per_million")
+    if input_price is None or output_price is None:
+        return None
+    system_prompt = options.get("system_prompt", "")
+    system_text = (
+        system_prompt
+        if isinstance(system_prompt, str)
+        else json.dumps(system_prompt, separators=(",", ":"), sort_keys=True)
+    )
+    input_chars = len(prompt) + len(system_text)
+    input_tokens = max(1, input_chars // 4)
+    max_output_tokens = int(
+        options.get("max_output_tokens") or options.get("max_tokens") or 256
+    )
+    return (
+        input_tokens * float(input_price) + max_output_tokens * float(output_price)
+    ) / 1_000_000
+
+
 def estimate_budget(config: dict[str, Any]) -> dict[str, Any]:
     models = resolve_models(config)
-    requests = _request_count(config, models)
-    retry_max_attempts = _retry_max_attempts(config)
-    possible_requests = requests * retry_max_attempts
-    prompt_chars = len(config.get("prompt", ""))
-    estimated_input_tokens = max(1, prompt_chars // 4)
-    max_output_tokens = int(
-        config.get("request", {}).get("max_output_tokens")
-        or config.get("request", {}).get("max_tokens")
-        or 256
+    work = _budget_work(config)
+    requests = len(work) * len(models)
+    possible_requests = len(models) * sum(
+        _retry_max_attempts(options) for _, options in work
+    )
+    retry_max_attempts = max(
+        (_retry_max_attempts(options) for _, options in work), default=1
     )
     costs: list[float | None] = []
+    maximum_costs: list[float | None] = []
     for model in models:
-        input_price = model.get("input_cost_per_million")
-        output_price = model.get("output_cost_per_million")
-        if input_price is None or output_price is None:
+        request_costs = [
+            _request_cost(model, prompt, options) for prompt, options in work
+        ]
+        if any(cost is None for cost in request_costs):
             costs.append(None)
+            maximum_costs.append(None)
             continue
-        per_request = (
-            estimated_input_tokens * float(input_price)
-            + max_output_tokens * float(output_price)
-        ) / 1_000_000
-        costs.append(per_request)
+        known_costs = [cast(float, cost) for cost in request_costs if cost is not None]
+        costs.append(sum(known_costs))
+        maximum_costs.append(
+            sum(
+                cast(float, cost) * _retry_max_attempts(options)
+                for cost, (_, options) in zip(request_costs, work)
+                if cost is not None
+            )
+        )
     cost = (
         None
         if any(item is None for item in costs)
-        else sum(item for item in costs if item is not None)
-        * (requests / len(models) if models else 0)
+        else sum(cast(float, item) for item in costs)
+    )
+    maximum_cost = (
+        None
+        if any(item is None for item in maximum_costs)
+        else sum(cast(float, item) for item in maximum_costs)
     )
     return {
         "requests": requests,
         "possible_requests": possible_requests,
         "retry_max_attempts": retry_max_attempts,
         "estimated_cost_usd": cost,
-        "maximum_estimated_cost_usd": (
-            cost * retry_max_attempts if cost is not None else None
-        ),
+        "maximum_estimated_cost_usd": (maximum_cost),
     }
 
 
@@ -250,7 +319,12 @@ def compare_results(
     current: dict[str, Any],
     thresholds: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    thresholds = thresholds or {"latency_p95": 0.25, "success_rate": -0.05}
+    thresholds = thresholds or {
+        "latency_p95": 0.25,
+        "success_rate": -0.05,
+        "valid_output_rate": -0.05,
+        "cost": 0.25,
+    }
     previous = {
         model.get("name", model.get("model")): model for model in baseline["models"]
     }
@@ -269,6 +343,9 @@ def compare_results(
         success_delta = new_summary.get("success_rate", 0) - old_summary.get(
             "success_rate", 0
         )
+        valid_output_delta = new_summary.get(
+            "valid_output_rate", new_summary.get("success_rate", 0)
+        ) - old_summary.get("valid_output_rate", old_summary.get("success_rate", 0))
         latency_delta = (
             None
             if old_latency is None or new_latency is None
@@ -278,14 +355,27 @@ def compare_results(
             None if old_cost is None or new_cost is None else new_cost - old_cost
         )
         regressions = []
-        if (
-            latency_delta is not None
-            and old_latency
-            and latency_delta / old_latency > thresholds.get("latency_p95", 1)
+        if latency_delta is not None and (
+            (old_latency == 0 and latency_delta > thresholds.get("latency_p95", 0))
+            or (
+                old_latency is not None
+                and old_latency > 0
+                and latency_delta / old_latency > thresholds.get("latency_p95", 1)
+            )
         ):
             regressions.append("latency_p95")
         if success_delta < thresholds.get("success_rate", -1):
             regressions.append("success_rate")
+        if valid_output_delta < thresholds.get("valid_output_rate", -1):
+            regressions.append("valid_output_rate")
+        if cost_delta is not None and (
+            (old_cost == 0 and cost_delta > thresholds.get("cost", 0))
+            or (
+                old_cost not in {None, 0}
+                and cost_delta / old_cost > thresholds.get("cost", float("inf"))
+            )
+        ):
+            regressions.append("cost")
         rows.append(
             {
                 "name": name,
@@ -293,6 +383,7 @@ def compare_results(
                 "latency_p95_delta_seconds": latency_delta,
                 "cost_delta_usd": cost_delta,
                 "success_rate_delta": success_delta,
+                "valid_output_rate_delta": valid_output_delta,
                 "regressions": regressions,
             }
         )

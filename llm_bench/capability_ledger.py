@@ -73,8 +73,12 @@ def apply_probe_evidence(
         key = f"{copy.get('provider', 'openai_compatible')}:{copy['model']}"
         probe = probes.get(key)
         fingerprint = (copy.get("capabilities") or {}).get("fingerprint")
-        if probe and (
-            not probe.get("fingerprint") or probe.get("fingerprint") == fingerprint
+        if (
+            probe
+            and probe.get("outcome") != "indeterminate"
+            and (
+                not probe.get("fingerprint") or probe.get("fingerprint") == fingerprint
+            )
         ):
             copy["catalog_type"] = probe["outcome"]
             copy["catalog_confidence"] = "probe"

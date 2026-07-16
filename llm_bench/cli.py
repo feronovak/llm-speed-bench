@@ -48,6 +48,7 @@ from .runner import (
     model_failed,
     profile_request_breakdown,
     result_failed,
+    validate_config_validations,
     run_benchmark,
     save_result,
     select_custom_prompt,
@@ -401,16 +402,23 @@ def _select_numbered_models(
             indexes.update(_selected_numbers(item, len(models)))
             continue
         provider, separator, family = item.partition("/")
-        matches = {
+        provider_matches = {
             index
             for index, model in enumerate(models)
             if model.get("provider", "openai_compatible").casefold()
             == provider.casefold()
-            and (
-                not separator
-                or model["model"].casefold().startswith(family.casefold() + "/")
-                or model["model"].casefold().startswith(family.casefold() + "-")
-            )
+        }
+        exact_matches = {
+            index
+            for index in provider_matches
+            if separator and models[index]["model"].casefold() == family.casefold()
+        }
+        matches = exact_matches or {
+            index
+            for index in provider_matches
+            if not separator
+            or models[index]["model"].casefold().startswith(family.casefold() + "/")
+            or models[index]["model"].casefold().startswith(family.casefold() + "-")
         }
         if not matches:
             raise ValueError(
@@ -528,7 +536,11 @@ def interactive_watch_selection(
         "Select tests (numbers/names/all) or Enter for the config prompt: "
     ).strip()
     if answer.casefold() == "all":
-        selected_tests = "all"
+        selected_tests = ",".join(
+            profile["name"]
+            for profile in BUILTIN_PROFILES
+            if "concurrency_levels" not in profile
+        )
     elif answer:
         selected_names: list[str] = []
         for item in [part.strip() for part in answer.split(",") if part.strip()]:
@@ -541,6 +553,8 @@ def interactive_watch_selection(
         selected_tests = ",".join(selected_names)
     else:
         selected_tests = None
+        if "prompt" not in watch_config:
+            raise ValueError("select a test or configure a top-level prompt")
     smoke = input_fn("Use smoke mode? [Y/n]: ").strip().casefold() not in {"n", "no"}
     selected_approved = {"models": selected_incumbents}
     config = build_candidate_config(
@@ -621,6 +635,8 @@ def _missing_discovery_keys(config: dict[str, Any]) -> list[str]:
 def _create_catalog_env_file(env_path: Path) -> None:
     """Reuse a project-level env file instead of copying credentials."""
     shared_env = env_path.parent.parent / ".env.production"
+    if env_path.is_symlink() and not env_path.exists():
+        env_path.unlink()
     if shared_env.is_file():
         env_path.symlink_to(os.path.relpath(shared_env, env_path.parent))
         return
@@ -689,7 +705,6 @@ def _watch_new_main(argv: list[str]) -> None:
     previous = load_snapshot(snapshot_path)
     current = snapshot_catalog(models)
     diff = catalog_diff(previous, current) if previous is not None else None
-    save_snapshot(snapshot_path, models)
     payload = {
         "snapshot": str(snapshot_path),
         "models": len(current),
@@ -704,6 +719,7 @@ def _watch_new_main(argv: list[str]) -> None:
         "diff": diff,
     }
     if not args.test and not args.interactive and not args.write_config:
+        save_snapshot(snapshot_path, models)
         print(
             json.dumps(payload, indent=2)
             if args.json
@@ -711,6 +727,13 @@ def _watch_new_main(argv: list[str]) -> None:
         )
         return
     approved_config = load_json(args.against)
+    approved_models = approved_config.get("models", [])
+    if not isinstance(approved_models, list) or any(
+        not isinstance(model, dict) or not isinstance(model.get("model"), str)
+        for model in approved_models
+    ):
+        raise ValueError("approved configuration requires models as objects with model")
+    approved_config["models"] = approved_models
     if args.write_config:
         if args.all_unapproved:
             approved_keys = {
@@ -746,10 +769,10 @@ def _watch_new_main(argv: list[str]) -> None:
                 f"{args.write_config} already exists; use --replace to update it"
             )
         config = dict(watch_config)
-        config["models"] = candidates
+        config["models"] = catalog_output(candidates)
         config["discovery"] = []
         args.write_config.write_text(
-            json.dumps(config, indent=2) + "\n", encoding="utf-8"
+            json.dumps(redact_secrets(config), indent=2) + "\n", encoding="utf-8"
         )
         print(f"Wrote candidate benchmark config to {args.write_config}")
         return
@@ -768,26 +791,34 @@ def _watch_new_main(argv: list[str]) -> None:
             f"Catalog refreshed: {len(models)} discovered; "
             f"{len(approved_keys)} approved; {len(candidates)} available for review."
         )
-        if previous is None:
-            print(f"Initial snapshot saved: {snapshot_path}")
         if not candidates:
             print("Every discovered model is already approved.")
             return
-        config = dict(watch_config)
-        config["models"] = candidates
-        config["discovery"] = []
-        selection = interactive_selection(
-            config,
-            color=sys.stdout.isatty(),
-            clear_fn=_clear_screen,
+        selection = interactive_watch_selection(
+            watch_config,
+            approved_config,
+            candidates,
         )
         if selection is None:
             return
-        config, args.tests = selection
+        config, args.tests, smoke = selection
+        if smoke:
+            config = apply_smoke_mode(config)
+            config.setdefault("save_responses", "failures")
+        final_selection = interactive_selection(
+            config,
+            color=sys.stdout.isatty(),
+            clear_fn=_clear_screen,
+            selected_models=config["models"],
+            selected_profile_selector=args.tests if args.tests is not None else "",
+        )
+        if final_selection is None:
+            return
+        config, args.tests = final_selection
     else:
         candidate_keys = {
             (item.get("provider", "openai_compatible"), item["model"])
-            for item in (diff["added"] if diff is not None else [])
+            for item in (diff["added"] if diff is not None else models)
         }
         candidates = [
             model
@@ -804,7 +835,7 @@ def _watch_new_main(argv: list[str]) -> None:
         config.setdefault("save_responses", "failures")
     if args.dry_run:
         plan = _dry_run_plan(config, args.tests)
-        plan["catalog_candidates"] = candidates
+        plan["catalog_candidates"] = catalog_output(candidates)
         print(json.dumps(plan, indent=2) if args.json else _format_dry_run_plan(plan))
         return
     if not args.interactive:
@@ -815,6 +846,7 @@ def _watch_new_main(argv: list[str]) -> None:
     print(json.dumps(result, indent=2) if args.json else console_report(result))
     if path is not None:
         print(f"Saved raw result to {path}", file=sys.stderr)
+    save_snapshot(snapshot_path, models)
     if args.interactive and path is not None:
         candidate_keys = {
             (model.get("provider", "openai_compatible"), model["model"])
@@ -1228,93 +1260,112 @@ def interactive_selection(
     output_fn: Callable[[str], None] = print,
     color: bool = False,
     clear_fn: Callable[[], None] | None = None,
+    selected_models: list[dict[str, Any]] | None = None,
+    selected_profile_selector: str | None = None,
 ) -> tuple[dict[str, Any], str | None] | None:
     if clear_fn:
         clear_fn()
-    models = resolve_models(config)
-    if not models:
-        raise ValueError("model discovery returned no models")
+    if selected_models is None:
+        models = resolve_models(config)
+        if not models:
+            raise ValueError("model discovery returned no models")
 
-    output_fn(_stage_heading("Models", "36", color))
-    for index, model in enumerate(models, 1):
-        provider = model.get("provider", "openai_compatible")
-        output_fn(
-            f"  {_style(str(index) + '.', '1;33', color)} "
-            f"{_style(provider, '36', color)}: {model['model']}"
-        )
-    model_answer = input_fn(
-        "Select models (numbers, provider, provider/family, or all): "
-    ).strip()
-    if not model_answer or model_answer.casefold() == "all":
-        selected_models = models
-    else:
-        selected_indexes: set[int] = set()
-        selectors = [item.strip() for item in model_answer.split(",") if item.strip()]
-        for selector in selectors:
-            if selector.isdigit():
-                selected_indexes.update(_selected_numbers(selector, len(models)))
-                continue
-            provider, separator, family = selector.casefold().partition("/")
-            matches = {
-                index
-                for index, model in enumerate(models)
-                if model.get("provider", "openai_compatible").casefold() == provider
-                and (
-                    not separator
-                    or model["model"].casefold().startswith(family + "/")
-                    or model["model"].casefold().startswith(family + "-")
-                )
-            }
-            if not matches:
-                raise ValueError(f"model selector {selector!r} matched no models")
-            selected_indexes.update(matches)
-        selected_models = [
-            model for index, model in enumerate(models) if index in selected_indexes
-        ]
+        output_fn(_stage_heading("Models", "36", color))
+        for index, model in enumerate(models, 1):
+            provider = model.get("provider", "openai_compatible")
+            output_fn(
+                f"  {_style(str(index) + '.', '1;33', color)} "
+                f"{_style(provider, '36', color)}: {model['model']}"
+            )
+        model_answer = input_fn(
+            "Select models (numbers, provider, provider/family, or all): "
+        ).strip()
+        if not model_answer or model_answer.casefold() == "all":
+            selected_models = models
+        else:
+            selected_indexes: set[int] = set()
+            selectors = [
+                item.strip() for item in model_answer.split(",") if item.strip()
+            ]
+            for selector in selectors:
+                if selector.isdigit():
+                    selected_indexes.update(_selected_numbers(selector, len(models)))
+                    continue
+                provider, separator, family = selector.casefold().partition("/")
+                provider_matches = {
+                    index
+                    for index, model in enumerate(models)
+                    if model.get("provider", "openai_compatible").casefold() == provider
+                }
+                exact_matches = {
+                    index
+                    for index in provider_matches
+                    if separator and models[index]["model"].casefold() == family
+                }
+                matches = exact_matches or {
+                    index
+                    for index in provider_matches
+                    if not separator
+                    or models[index]["model"].casefold().startswith(family + "/")
+                    or models[index]["model"].casefold().startswith(family + "-")
+                }
+                if not matches:
+                    raise ValueError(f"model selector {selector!r} matched no models")
+                selected_indexes.update(matches)
+            selected_models = [
+                model for index, model in enumerate(models) if index in selected_indexes
+            ]
 
-    output_fn("")
-    output_fn(_stage_heading("Tests", "35", color))
-    tests: list[tuple[str, str, str]] = []
-    for profile in BUILTIN_PROFILES:
-        tests.append(("profile", profile["name"], profile["description"]))
-    custom_prompts = config.get("prompts", [])
-    for prompt in custom_prompts:
-        tests.append(
-            ("custom", prompt["name"], prompt.get("description", "Custom prompt test."))
-        )
-    for index, (_, name, description) in enumerate(tests, 1):
-        output_fn(
-            f"  {_style(str(index) + '.', '1;33', color)} "
-            f"{_style(name, '1', color)} — {description}"
-        )
-    profile_answer = input_fn(
-        "Select tests (numbers/names/all) or Enter for the config prompt: "
-    ).strip()
-    if profile_answer.casefold() == "all":
-        profile_selector = ",".join(
-            profile["name"]
-            for profile in BUILTIN_PROFILES
-            if "concurrency_levels" not in profile
-        )
-        profile_selector = ",".join(
-            [profile_selector] + [prompt["name"] for prompt in custom_prompts]
-        )
-    elif profile_answer:
-        selected_names: list[str] = []
-        for item in [
-            part.strip() for part in profile_answer.split(",") if part.strip()
-        ]:
-            if item.isdigit():
-                selected_names.extend(
-                    tests[index][1] for index in _selected_numbers(item, len(tests))
+    if selected_profile_selector is None:
+        output_fn("")
+        output_fn(_stage_heading("Tests", "35", color))
+        tests: list[tuple[str, str, str]] = []
+        for profile in BUILTIN_PROFILES:
+            tests.append(("profile", profile["name"], profile["description"]))
+        custom_prompts = config.get("prompts", [])
+        for prompt in custom_prompts:
+            tests.append(
+                (
+                    "custom",
+                    prompt["name"],
+                    prompt.get("description", "Custom prompt test."),
                 )
-            else:
-                selected_names.append(item)
-        profile_selector = ",".join(selected_names)
+            )
+        for index, (_, name, description) in enumerate(tests, 1):
+            output_fn(
+                f"  {_style(str(index) + '.', '1;33', color)} "
+                f"{_style(name, '1', color)} — {description}"
+            )
+        profile_answer = input_fn(
+            "Select tests (numbers/names/all) or Enter for the config prompt: "
+        ).strip()
+        if profile_answer.casefold() == "all":
+            profile_selector = ",".join(
+                profile["name"]
+                for profile in BUILTIN_PROFILES
+                if "concurrency_levels" not in profile
+            )
+            profile_selector = ",".join(
+                [profile_selector] + [prompt["name"] for prompt in custom_prompts]
+            )
+        elif profile_answer:
+            selected_names: list[str] = []
+            for item in [
+                part.strip() for part in profile_answer.split(",") if part.strip()
+            ]:
+                if item.isdigit():
+                    selected_names.extend(
+                        tests[index][1] for index in _selected_numbers(item, len(tests))
+                    )
+                else:
+                    selected_names.append(item)
+            profile_selector = ",".join(selected_names)
+        else:
+            if "prompt" not in config:
+                raise ValueError("select a custom prompt name or built-in profile")
+            profile_selector = None
     else:
-        if "prompt" not in config:
-            raise ValueError("select a custom prompt name or built-in profile")
-        profile_selector = None
+        profile_selector = selected_profile_selector
 
     default_repetitions = int(
         config.get(
@@ -1338,7 +1389,6 @@ def interactive_selection(
     output_fn("  3. test-fail — stop on model output failure, ignore API-ok passes")
     output_fn("  4. never — run every selected model")
     stop_answer = input_fn("Stop on [1]: ").strip().casefold()
-    confirmation_answer: str | None = None
     if stop_answer in {"", "1", "any-fail"}:
         stop_on = "any-fail"
     elif stop_answer in {"2", "api-error"}:
@@ -1348,8 +1398,9 @@ def interactive_selection(
     elif stop_answer in {"4", "never", "none"}:
         stop_on = None
     elif stop_answer in {"y", "yes", "n", "no"}:
+        # A familiar confirmation answer here must never authorize spending.
+        # Keep the safe default and still ask the separate paid-run question.
         stop_on = "any-fail"
-        confirmation_answer = stop_answer
     else:
         raise ValueError(
             "stop mode must be 1, 2, 3, 4, any-fail, api-error, test-fail, or never"
@@ -1411,8 +1462,7 @@ def interactive_selection(
         color=color,
     ):
         return None
-    if confirmation_answer is None:
-        confirmation_answer = input_fn("Run paid benchmark? [y/N]: ").strip().casefold()
+    confirmation_answer = input_fn("Run paid benchmark? [y/N]: ").strip().casefold()
     if confirmation_answer not in {"y", "yes"}:
         output_fn(_style("Cancelled.", "1;33", color))
         return None
@@ -1623,6 +1673,7 @@ def main() -> None:
         config = apply_environment(config, args.environment_name)
         config = apply_model_aliases(config)
         config = apply_provider_presets(config)
+        validate_config_validations(config)
         if args.profiles and args.tests:
             parser.error("--profiles cannot be combined with --tests")
         if args.migration_check and (args.profiles or args.tests or args.prompt_name):

@@ -40,16 +40,16 @@ def classify_catalog_model(model: dict[str, Any]) -> dict[str, Any]:
     output = {
         str(item).casefold() for item in capabilities.get("output_modalities") or []
     }
+    if capabilities.get("text_generation") == "ready":
+        classified["catalog_type"] = "text-ready"
+        classified["catalog_confidence"] = "official"
+        return classified
     named_type = next(
         (kind for term, kind in _NON_CHAT_NAME_TYPES.items() if term in name), None
     )
     if named_type and not output:
         classified["catalog_type"] = named_type
         classified["catalog_confidence"] = "heuristic"
-        return classified
-    if capabilities.get("text_generation") == "ready":
-        classified["catalog_type"] = "text-ready"
-        classified["catalog_confidence"] = "official"
         return classified
     if capabilities.get("text_generation") == "candidate":
         classified["catalog_type"] = "text-candidate"
@@ -215,7 +215,11 @@ def _openrouter(source: dict[str, Any]) -> list[dict[str, Any]]:
         query["sort"] = source["sort"]
     if source.get("require_parameters"):
         query["supported_parameters"] = ",".join(source["require_parameters"])
-    url = config["base_url"].rstrip("/") + "/models?" + urllib.parse.urlencode(query)
+    url = (
+        config["base_url"].rstrip("/")
+        + "/models?"
+        + urllib.parse.urlencode(query, doseq=True)
+    )
     payload = _get_json(url, config.get("api_key_env"), config.get("headers"))
     result = []
     for item in payload.get("data", []):

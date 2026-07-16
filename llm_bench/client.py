@@ -71,7 +71,7 @@ def _provider_options(options: dict[str, Any], provider: str) -> dict[str, Any]:
     configured = options.get("provider_options", {})
     if not isinstance(configured, dict):
         return {}
-    provider_keys = set(PROVIDER_DEFAULTS) | {"all"}
+    provider_keys = set(PROVIDER_DEFAULTS) | {"openai_compatible", "all"}
     if any(key in provider_keys for key in configured):
         merged = dict(configured.get("all", {}))
         merged.update(configured.get(provider, {}))
@@ -104,6 +104,8 @@ def _retry_config(options: dict[str, Any]) -> dict[str, Any]:
 
 def _classify_failure(error: str, status_code: int | None = None) -> str:
     folded = error.casefold()
+    if status_code == 404:
+        return "not_found"
     if "environment variable" in folded or status_code in {401, 403}:
         return "credentials"
     if "unsupported" in folded and "parameter" in folded:
@@ -114,9 +116,16 @@ def _classify_failure(error: str, status_code: int | None = None) -> str:
         return "timeout"
     if status_code is not None and 500 <= status_code <= 599:
         return "transient_provider"
-    if any(text in folded for text in ("connection reset", "temporarily unavailable")):
+    return "provider_error"
+
+
+def _classify_exception(exc: Exception) -> str:
+    """Classify local transport errors without relying on OS message text."""
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    if isinstance(exc, OSError):
         return "network"
-    return "provider_error" if status_code is not None else "network"
+    return _classify_failure(str(exc))
 
 
 def _retry_delay(config: dict[str, Any], retry_index: int) -> float:
@@ -173,21 +182,23 @@ class ProviderClient(ABC):
         last_error = ""
         last_category = "provider_error"
         for attempt in range(1, retry["max_attempts"] + 1):
-            require_http_url(self.endpoint())
-            request = urllib.request.Request(
-                self.endpoint(),
-                data=json.dumps(self.body(prompt, request_options)).encode(),
-                headers={
-                    "Content-Type": "application/json",
-                    **self.headers(api_key),
-                    **self.model.get("headers", {}),
-                },
-                method="POST",
-            )
+            attempt_started = time.perf_counter()
             first_token_at: float | None = None
             content: list[str] = []
             usage: dict[str, int] = {}
             try:
+                endpoint = self.endpoint()
+                require_http_url(endpoint)
+                request = urllib.request.Request(
+                    endpoint,
+                    data=json.dumps(self.body(prompt, request_options)).encode(),
+                    headers={
+                        "Content-Type": "application/json",
+                        **self.headers(api_key),
+                        **self.model.get("headers", {}),
+                    },
+                    method="POST",
+                )
                 with urllib.request.urlopen(  # nosec B310
                     request, timeout=self.timeout
                 ) as response:
@@ -222,7 +233,7 @@ class ProviderClient(ABC):
                 last_category = _classify_failure(last_error, exc.code)
             except (OSError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
                 last_error = str(exc)
-                last_category = _classify_failure(last_error)
+                last_category = _classify_exception(exc)
             else:
                 finished = time.perf_counter()
                 output_tokens = usage.get("output_tokens")
@@ -236,8 +247,8 @@ class ProviderClient(ABC):
                 )
                 return {
                     "ok": True,
-                    "latency_seconds": finished - started,
-                    "ttft_seconds": first_token_at - started
+                    "latency_seconds": finished - attempt_started,
+                    "ttft_seconds": first_token_at - attempt_started
                     if first_token_at
                     else None,
                     "output_tokens_per_second": throughput,
@@ -366,47 +377,77 @@ class OpenAIResponsesClient(OpenAICompatibleClient):
             return self._failure(
                 started, f"environment variable {key_env!r} is not set"
             )
-        try:
-            require_http_url(self.endpoint())
-            request = urllib.request.Request(
-                self.endpoint(),
-                data=json.dumps(self.body(prompt, request_options)).encode(),
-                headers={"Content-Type": "application/json", **self.headers(api_key)},
-                method="POST",
-            )
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:  # nosec B310
-                body = response.read(MAX_RESPONSE_BYTES + 1)
-            if len(body) > MAX_RESPONSE_BYTES:
-                raise ValueError("provider response exceeded the 8 MiB safety limit")
-            payload = json.loads(body)
-        except urllib.error.HTTPError as exc:
-            detail = exc.read(2000).decode("utf-8", errors="replace")
-            return self._failure(started, f"HTTP {exc.code}: {detail}")
-        except (OSError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
-            return self._failure(started, str(exc))
-        usage = payload.get("usage") or {}
-        text = str(payload.get("output_text") or "")
-        if not text:
-            for output in payload.get("output") or []:
-                for content in output.get("content") or []:
-                    if content.get("type") in {"output_text", "text"}:
-                        text += str(content.get("text") or "")
-        finished = time.perf_counter()
-        return {
-            "ok": bool(text),
-            "latency_seconds": finished - started,
-            "ttft_seconds": None,
-            "output_tokens_per_second": None,
-            "input_tokens": usage.get("input_tokens"),
-            "output_tokens": usage.get("output_tokens"),
-            "response_chars": len(text),
-            "response": text,
-            "error": None if text else "Responses API returned no text output",
-            "attempts": 1,
-            "retry_count": 0,
-            "retry_reasons": [],
-            "failure_category": None if text else "provider_error",
-        }
+        retry = _retry_config(request_options)
+        retry_reasons: list[str] = []
+        last_error = ""
+        last_category = "provider_error"
+        for attempt in range(1, retry["max_attempts"] + 1):
+            attempt_started = time.perf_counter()
+            try:
+                endpoint = self.endpoint()
+                require_http_url(endpoint)
+                request = urllib.request.Request(
+                    endpoint,
+                    data=json.dumps(self.body(prompt, request_options)).encode(),
+                    headers={
+                        "Content-Type": "application/json",
+                        **self.headers(api_key),
+                        **self.model.get("headers", {}),
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:  # nosec B310
+                    body = response.read(MAX_RESPONSE_BYTES + 1)
+                if len(body) > MAX_RESPONSE_BYTES:
+                    raise ValueError(
+                        "provider response exceeded the 8 MiB safety limit"
+                    )
+                payload = json.loads(body)
+            except urllib.error.HTTPError as exc:
+                detail = exc.read(2000).decode("utf-8", errors="replace")
+                last_error = f"HTTP {exc.code}: {detail}"
+                last_category = _classify_failure(last_error, exc.code)
+            except (OSError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+                last_error = str(exc)
+                last_category = _classify_exception(exc)
+            else:
+                usage = payload.get("usage") or {}
+                text = str(payload.get("output_text") or "")
+                if not text:
+                    for output in payload.get("output") or []:
+                        for content in output.get("content") or []:
+                            if content.get("type") in {"output_text", "text"}:
+                                text += str(content.get("text") or "")
+                finished = time.perf_counter()
+                return {
+                    "ok": bool(text),
+                    "latency_seconds": finished - attempt_started,
+                    "ttft_seconds": None,
+                    "output_tokens_per_second": None,
+                    "input_tokens": usage.get("input_tokens"),
+                    "output_tokens": usage.get("output_tokens"),
+                    "response_chars": len(text),
+                    "response": text,
+                    "error": None if text else "Responses API returned no text output",
+                    "attempts": attempt,
+                    "retry_count": attempt - 1,
+                    "retry_reasons": retry_reasons,
+                    "failure_category": None if text else "provider_error",
+                }
+            if (
+                last_category not in retry["retry_on"]
+                or attempt == retry["max_attempts"]
+            ):
+                return self._failure(
+                    started, last_error, attempt, retry_reasons, last_category
+                )
+            retry_reasons.append(last_category)
+            delay = _retry_delay(retry, attempt)
+            if delay:
+                time.sleep(delay)
+        return self._failure(
+            started, last_error, retry["max_attempts"], retry_reasons, last_category
+        )
 
 
 class AnthropicClient(ProviderClient):
@@ -462,7 +503,7 @@ class GeminiClient(ProviderClient):
             "generationConfig": {},
         }
         generation = body["generationConfig"]
-        if "temperature" in options:
+        if "temperature" in options and _supports_temperature(self.model):
             generation["temperature"] = options["temperature"]
         limit = options.get("max_output_tokens", options.get("max_tokens"))
         if limit is not None:

@@ -47,6 +47,13 @@ def test_require_http_url_rejects_private_ip_targets(url):
         require_http_url(url)
 
 
+def test_invalid_scheme_does_not_echo_embedded_credentials():
+    with pytest.raises(ValueError, match="embedded credentials") as exc_info:
+        require_http_url("file://user:super-secret@example.com/path")
+
+    assert "super-secret" not in str(exc_info.value)
+
+
 def test_require_http_url_rejects_hostname_resolving_to_private_address(monkeypatch):
     monkeypatch.setattr(
         socket,

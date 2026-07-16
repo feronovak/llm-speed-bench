@@ -65,7 +65,7 @@ Use the strictest rule that expresses your requirement:
 
 | Requirement | Validation |
 |---|---|
-| A fixed label or exactly one allowed answer | `regex`, for example `"^billing$"` |
+| A fixed label or exactly one allowed answer | `exact` or `regex`, for example `"^billing$"` |
 | A required phrase, identifier, or citation | `contains` |
 | A stable structured payload | `json_schema` |
 | A flexible user-facing response | Start with `contains`, then add a human review case if wording matters |

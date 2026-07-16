@@ -37,7 +37,7 @@ one top-level `prompt` or one or more named `prompts`.
 | `temperature` | provider default | Sampling temperature, unless the model disables it. |
 | `max_output_tokens` | `256` for planning | Maximum generated tokens. `max_tokens` is accepted for compatibility. |
 | `system_prompt` | — | Shared system instructions. |
-| `provider_options` | `{}` | Provider request body fields; one object or `{all, provider}` maps. |
+| `provider_options` | `{}` | Provider request body fields; one object or `{all, provider}` maps (`openai_compatible` is valid for a custom OpenAI-style endpoint). |
 | `retry` | two attempts | `true` or an object described below. |
 
 For the `mock` provider only, `response` supplies the returned text when it is
@@ -66,13 +66,15 @@ and `require_parameters` are OpenRouter catalog filters.
 
 ## `prompts`, validation, aliases, and environments
 
-Each prompt requires unique `name` and either non-empty `prompt` or a relative
+Each prompt requires a unique `name` that does not reuse a built-in test-pack
+name, and either non-empty `prompt` or a relative
 `prompt_file` within the config directory. Optional keys are `description`,
 `system_prompt`, `request`, `validation`, and `presets`.
 
-Validation supports `contains`, `regex`, and `json_schema`; an absent custom
-validation means non-empty output. Built-in packs also use exact, numeric, and
-JSON-subset evaluators. The supported JSON Schema subset handles object
+Validation supports non-empty `contains`, `regex`, `exact`, and `json_schema`; an absent
+custom validation means non-empty output. Unknown validation keys are rejected
+before a benchmark can run. Built-in packs also use numeric and JSON-subset
+evaluators. The supported JSON Schema subset handles object
 `required`/`properties`, arrays and item limits, primitive `type`, and `enum`.
 
 `aliases` maps a name to a model object; use its name in `models`. An

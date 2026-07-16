@@ -203,7 +203,7 @@ def evaluate_response(response: str, evaluator: dict[str, Any]) -> dict[str, Any
         }
     if evaluator_type == "contains":
         expected = evaluator["contains"]
-        valid = expected in response
+        valid = bool(expected) and expected in response
         return {
             "score": 1.0 if valid else 0.0,
             "valid": valid,
@@ -257,15 +257,12 @@ def evaluate_response(response: str, evaluator: dict[str, Any]) -> dict[str, Any
             "error": None if valid else "numeric answer outside tolerance",
         }
     if evaluator_type == "numeric_answer":
-        matches = re.findall(r"[-+]?\d[\d,]*(?:\.\d+)?", response)
-        if not matches:
+        normalized = response.strip().replace(",", "")
+        if not re.fullmatch(r"[-+]?\d+(?:\.\d+)?", normalized):
             return {"score": 0.0, "valid": False, "error": "not a numeric answer"}
         expected = float(evaluator["expected"])
         tolerance = float(evaluator.get("tolerance", 0))
-        valid = any(
-            abs(float(match.replace(",", "")) - expected) <= tolerance
-            for match in matches
-        )
+        valid = abs(float(normalized) - expected) <= tolerance
         return {
             "score": 1.0 if valid else 0.0,
             "valid": valid,

@@ -8,10 +8,10 @@ import socket
 def require_http_url(url: str, *, resolve_host: bool = True) -> None:
     """Reject local-file and ambiguous URLs before urllib handles them."""
     parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise ValueError(f"URL must use http or https with a host: {url!r}")
     if parsed.username is not None or parsed.password is not None:
         raise ValueError("URL must not contain embedded credentials")
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("URL must use http or https with a host")
     try:
         address = ip_address(parsed.hostname)
     except ValueError:

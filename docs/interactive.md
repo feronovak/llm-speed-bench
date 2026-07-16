@@ -25,7 +25,9 @@ It has three stages:
 1. **Select** — choose models, tests, repetitions, and when to stop.
 2. **Preview** — read the exact request count, retry maximum, estimated cost,
    retention setting, and per-test breakdown.
-3. **Run** — type `y` only when the plan is right. Progress reports distinguish
+3. **Run** — type `y` only when the plan is right. The paid-run confirmation is
+   always separate from stop-mode selection, so a stray `y` there cannot start a
+   request. Progress reports distinguish
    `API FAIL` from `API OK / TEST FAIL`.
 
 ![Cancelled mock interactive session](images/interactive-mock-session.svg)

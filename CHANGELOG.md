@@ -2,6 +2,41 @@
 
 All notable changes to this project are documented here.
 
+## 1.2.2 - 2026-07-16
+
+### Fixed
+
+- Keep plain-prompt validation results in model summaries, quality gates, and
+  recommendation ranking so an invalid output can never pass or be recommended.
+- Reject unknown validation keys and support explicit exact-match validation in
+  ordinary and starter configurations.
+- Calculate request and retry-expanded cost limits from every profile case,
+  warmup, prompt override, and output limit.
+- Preserve per-model results when client setup, runtime URL validation, or a
+  request worker fails instead of aborting the benchmark.
+- Keep transient catalogue probe failures retryable; only structured stable
+  incompatibility evidence changes a model's catalogue classification.
+- Measure successful request latency and time-to-first-token per final attempt,
+  excluding retry backoff, and apply the same retry policy to Responses API
+  requests.
+- Gate CI comparisons on configured cost regressions, reject ambiguous custom
+  prompt names and empty `contains` rules, and make numeric-only checks reject
+  explanatory or contradictory output.
+- Keep interactive catalogue comparisons head-to-head with selected approved
+  models; require a distinct paid-run confirmation even after a stray `y` at
+  the stop-mode prompt; preserve discovery deltas when a candidate run fails.
+- Prefer authoritative ready-text catalogue evidence over model-name heuristics
+  and redact Gemini and xAI key formats from all terminal, JSON, candidate-plan,
+  and result output.
+- Preserve transport retries by classifying socket failures by exception type;
+  bootstrap a catalogue snapshot only after a successful first candidate run.
+- Gate CI comparisons on validation-rate regressions as well as latency,
+  request success, and cost; reject legacy built-in test aliases as custom
+  prompt names.
+- Keep `all` in catalogue review to the four inexpensive functional checks,
+  protect invalid-scheme URL errors from credential echoes, and harden local
+  workspace, exact-model-selection, approval-file, and query-encoding edges.
+
 ## 1.2.1 - 2026-07-16
 
 ### Fixed

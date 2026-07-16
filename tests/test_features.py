@@ -87,6 +87,34 @@ def test_compare_results_reports_metric_deltas_and_regressions():
     assert row["cost_delta_usd"] == 0.01
     assert row["success_rate_delta"] == -0.5
     assert "success_rate" in row["regressions"]
+    assert "cost" in row["regressions"]
+
+
+def test_compare_results_gates_a_validity_collapse_even_when_requests_succeed():
+    baseline = {
+        "models": [
+            {"name": "model", "summary": {**_summary(1, 0.01), "valid_output_rate": 1}}
+        ]
+    }
+    current = {
+        "models": [
+            {"name": "model", "summary": {**_summary(1, 0.01), "valid_output_rate": 0}}
+        ]
+    }
+
+    assert (
+        "valid_output_rate"
+        in compare_results(baseline, current)["models"][0]["regressions"]
+    )
+
+
+def test_compare_results_handles_zero_latency_baselines_without_division():
+    baseline = {"models": [{"name": "model", "summary": _summary(0.0, 0.01)}]}
+    current = {"models": [{"name": "model", "summary": _summary(1.0, 0.01)}]}
+
+    assert (
+        "latency_p95" in compare_results(baseline, current)["models"][0]["regressions"]
+    )
 
 
 def test_replay_config_uses_saved_source_config_and_exact_model_set():
@@ -226,6 +254,30 @@ def test_estimated_budget_reports_retry_expanded_upper_bound():
     assert budget["requests"] == 2
     assert budget["possible_requests"] == 6
     assert budget["maximum_estimated_cost_usd"] == budget["estimated_cost_usd"] * 3
+
+
+def test_budget_uses_profile_case_prompts_and_profile_request_limits():
+    config = {
+        "models": [
+            {
+                "model": "priced",
+                "input_cost_per_million": 0,
+                "output_cost_per_million": 1_000_000,
+            }
+        ],
+        "profiles": "structured-output-check",
+        "suite_repetitions": 1,
+        "warmups": 0,
+        "request": {"max_output_tokens": 1},
+        "max_estimated_cost_usd": 1000,
+    }
+
+    budget = estimate_budget(config)
+
+    assert budget["requests"] == 3
+    assert budget["estimated_cost_usd"] >= 3 * 512
+    with pytest.raises(ValueError, match="max_estimated_cost_usd"):
+        check_budget(config)
 
 
 def test_aliases_and_environment_overlays_are_applied_to_configs():

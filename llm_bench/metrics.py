@@ -115,6 +115,12 @@ def summarize(samples: list[dict[str, Any]], model: dict[str, Any]) -> dict[str,
         "successful": len(successful),
         "failed": len(samples) - len(successful),
         "success_rate": len(successful) / len(samples) if samples else 0,
+        "valid_output_rate": (
+            sum(sample.get("valid_output", sample["ok"]) is True for sample in samples)
+            / len(samples)
+            if samples
+            else 0
+        ),
         "latency_seconds": stats(successful_numbers("latency_seconds")),
         "ttft_seconds": stats(successful_numbers("ttft_seconds")),
         "output_tokens_per_second": stats(

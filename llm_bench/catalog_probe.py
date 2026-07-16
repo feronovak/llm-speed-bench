@@ -19,15 +19,14 @@ def probe_model(
         outcome = "text-ready"
         error_category = None
     else:
-        error_category = result.get("failure_category")
-        error = str(result.get("error") or "").casefold()
-        outcome = (
-            "unavailable"
-            if "404" in error
-            else "text-special"
-            if "endpoint" in error or "parameter" in error
-            else "indeterminate"
-        )
+        raw_category = result.get("failure_category")
+        error_category = str(raw_category) if raw_category else None
+        if error_category == "not_found":
+            outcome = "unavailable"
+        elif error_category == "unsupported_parameter":
+            outcome = "text-special"
+        else:
+            outcome = "indeterminate"
     probe = {
         "provider": model.get("provider", "openai_compatible"),
         "model": model["model"],
