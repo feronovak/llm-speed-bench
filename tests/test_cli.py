@@ -307,6 +307,18 @@ def test_main_rejects_profiles_and_tests_together(monkeypatch, tmp_path, capsys)
     assert "--profiles cannot be combined with --tests" in capsys.readouterr().err
 
 
+def test_version_flag_prints_package_version(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["llm-preflight", "--version"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 0
+    from llm_preflight import __version__
+
+    assert capsys.readouterr().out.strip() == f"llm-preflight {__version__}"
+
+
 def test_help_lists_tests_before_profiles(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["llm-preflight", "--help"])
 

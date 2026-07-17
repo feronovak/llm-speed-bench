@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 2.0.4 - 2026-07-17
+
+### Added
+
+- Add `--version` to the main command.
+
 ## 2.0.3 - 2026-07-17
 
 ### Fixed

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .catalog import classify_catalog_model, resolve_models
 from .client import PROVIDER_DEFAULTS
 from .catalog_watch import (
@@ -1525,6 +1526,9 @@ def main() -> None:
             raise SystemExit(2) from None
         return
     parser = argparse.ArgumentParser(description="Benchmark configurable LLM providers")
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
     parser.add_argument(
         "config", type=Path, nargs="?", help="benchmark JSON configuration"
     )

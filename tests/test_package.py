@@ -8,7 +8,7 @@ from llm_preflight.runner import run_benchmark
 
 
 def test_package_version_is_stable_release():
-    assert __version__ == "2.0.3"
+    assert __version__ == "2.0.4"
 
 
 def test_llm_preflight_is_the_only_console_command(monkeypatch):
@@ -39,7 +39,7 @@ def test_setup_py_has_only_the_single_console_entry_point():
     setup = Path("setup.py").read_text()
 
     assert 'name="llm-preflight"' in setup
-    assert 'version="2.0.3"' in setup
+    assert 'version="2.0.4"' in setup
     assert '"llm-preflight=llm_preflight.__main__:main"' in setup
     assert "llm-bench" not in setup
     assert "llm_bench" not in setup
