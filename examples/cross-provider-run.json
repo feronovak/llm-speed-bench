@@ -1,0 +1,55 @@
+{
+  "name": "model-switch-preflight",
+  "prompt": "List five common reasons a customer cannot log in after changing their email address, one sentence each.",
+  "repetitions": 3,
+  "warmups": 1,
+  "concurrency": 1,
+  "timeout_seconds": 120,
+  "save_responses": false,
+  "request": {
+    "system_prompt": "Be concise and factual.",
+    "temperature": 0,
+    "max_output_tokens": 512,
+    "retry": {
+      "max_attempts": 2,
+      "initial_delay_seconds": 0.25,
+      "max_delay_seconds": 4,
+      "backoff_multiplier": 2
+    }
+  },
+  "validation": {
+    "regex": "\\S+"
+  },
+  "models": [
+    {
+      "name": "gpt-5.6-luna",
+      "provider": "openai",
+      "model": "gpt-5.6-luna"
+    },
+    {
+      "name": "gpt-5.4-mini",
+      "provider": "openai",
+      "model": "gpt-5.4-mini"
+    },
+    {
+      "name": "claude-fable-5",
+      "provider": "anthropic",
+      "model": "claude-fable-5"
+    },
+    {
+      "name": "claude-opus-4-8",
+      "provider": "anthropic",
+      "model": "claude-opus-4-8"
+    },
+    {
+      "name": "gemini-3.5-flash",
+      "provider": "gemini",
+      "model": "gemini-3.5-flash"
+    },
+    {
+      "name": "minimax-m3",
+      "provider": "openrouter",
+      "model": "minimax/minimax-m3"
+    }
+  ]
+}
