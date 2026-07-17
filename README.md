@@ -84,6 +84,15 @@ Numbers like these are evidence for one environment at one time, not a
 leaderboard. Latency depends on your network and region; run the preflight
 from the host that will serve production traffic.
 
+The same comparison can be driven interactively — pick models and tests at
+the terminal, read the cost ceiling before anything is sent, watch each
+request report its own cost, and end on the decision. This capture is a real
+two-model paid run that cost half a cent
+([config](https://github.com/feronovak/llm-preflight/blob/main/examples/flagship-comparison.json),
+[details](https://github.com/feronovak/llm-preflight/blob/main/docs/interactive.md)):
+
+![Interactive comparison of two commercial models on two custom chat prompts, from selection through cost preview to the results table and decision](https://raw.githubusercontent.com/feronovak/llm-preflight/main/docs/images/interactive-demo.gif)
+
 ## First live run
 
 Python 3.10+ is required. There are no third-party runtime dependencies:
