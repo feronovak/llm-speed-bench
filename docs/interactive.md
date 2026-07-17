@@ -30,10 +30,14 @@ It has three stages:
    request. Progress reports distinguish
    `API FAIL` from `API OK / TEST FAIL`.
 
-![Cancelled mock interactive session](images/interactive-mock-session.svg)
+![Interactive comparison of two commercial models on two custom chat prompts, from selection through cost preview to the results table and decision](images/interactive-demo.gif)
 
-This capture uses the no-key mock config created by `llm-preflight --init`. It was
-cancelled at confirmation, so it made no network or paid request.
+This capture is a real paid run: two flagship models compared on two custom
+chat prompts, selected interactively. The plan screen shows the request and
+cost ceiling before confirmation, every request line reports its own cost,
+and the whole run cost $0.0052. The config is
+[examples/flagship-comparison.json](../examples/flagship-comparison.json) —
+swap in your own model IDs and prompts to reproduce it.
 
 ## How to answer the prompts
 
