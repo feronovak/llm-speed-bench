@@ -1852,6 +1852,70 @@ def test_main_dry_run_explains_all_tests_load_expansion(monkeypatch, tmp_path, c
     assert output["requests"] == 34
 
 
+def test_main_json_with_baseline_emits_one_parseable_document(
+    tmp_path, monkeypatch, capsys
+):
+    config = tmp_path / "benchmark.json"
+    baseline = tmp_path / "baseline.json"
+    config.write_text(
+        '{"prompt":"Reply with ok.","models":[{"provider":"mock","model":"local"}]}'
+    )
+    baseline.write_text('{"models": []}')
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "llm-preflight",
+            str(config),
+            "--baseline",
+            str(baseline),
+            "--json",
+            "--no-save",
+        ],
+    )
+
+    cli.main()
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["baseline_diff"]["ok"] is True
+
+
+def test_replay_loads_env_file_beside_the_recorded_source_config(tmp_path, monkeypatch):
+    source_config = tmp_path / "project" / "benchmark.json"
+    source_config.parent.mkdir()
+    source_config.write_text("{}")
+    result_path = tmp_path / "results" / "run.json"
+    result_path.parent.mkdir()
+    result_path.write_text(
+        json.dumps(
+            {
+                "source_config_path": str(source_config),
+                "source_config": {"prompt": "Reply with ok.", "models": []},
+                "models": [],
+                "settings": {},
+            }
+        )
+    )
+    loaded = []
+    monkeypatch.setattr(cli, "load_env_file", lambda path: loaded.append(path))
+    monkeypatch.setattr(
+        sys, "argv", ["llm-preflight", "--replay", str(result_path), "--dry-run"]
+    )
+
+    cli.main()
+
+    assert loaded == [source_config.parent / ".env.production"]
+
+
+def test_models_from_cli_rejects_an_unprefixed_non_openai_model_name():
+    with pytest.raises(ValueError, match="provider:model"):
+        cli._models_from_cli("claude-3-opus")
+
+    assert cli._models_from_cli("gpt-5.4-mini") == [
+        {"provider": "openai", "model": "gpt-5.4-mini"}
+    ]
+
+
 def test_main_enforces_budget_for_tests_selected_on_command_line(monkeypatch, tmp_path):
     config = tmp_path / "benchmark.json"
     config.write_text(

@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 2.1.1 - 2026-07-21
+
+### Fixed
+
+- Count Gemini thinking tokens as billable output tokens and apply cache-hit and
+  long-context pricing tiers per request, including Gemini 3.1 Pro Preview's
+  published 200k-input boundary.
+- Keep `--json --baseline` machine-readable by embedding the comparison in the
+  single JSON result document.
+- Apply the same safe 256-token default output cap across provider clients.
+- Fail comparison and recommendation gates for removed models, missing
+  validation evidence, or zero-sample model results; deduplicate repeated test
+  selectors before requests are planned.
+- Refuse provider and catalog redirects, reject ambiguous unprefixed
+  non-OpenAI quick-model IDs, load replay credentials from the recorded source
+  config location, and preserve provider catalog order when dates are absent.
+
 ## 2.1.0 - 2026-07-21
 
 ### Added

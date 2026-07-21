@@ -158,6 +158,10 @@ def _models_from_cli(value: str) -> list[dict[str, Any]]:
         if not item:
             continue
         provider, separator, model = item.partition(":")
+        if not separator and not provider.startswith(("gpt-", "o1", "o3", "o4")):
+            raise ValueError(
+                "unprefixed model names must be OpenAI model IDs; use provider:model"
+            )
         models.append(
             {"provider": provider, "model": model}
             if separator
@@ -1679,8 +1683,13 @@ def main() -> None:
                 "warmups": 0,
             }
         elif args.replay:
-            config = replay_config(load_json(args.replay))
-            _load_config_env_file(args.replay, args)
+            replay_result = load_json(args.replay)
+            config = replay_config(replay_result)
+            source_config_path = replay_result.get("source_config_path")
+            _load_config_env_file(
+                Path(source_config_path) if source_config_path else args.replay,
+                args,
+            )
         else:
             if args.config is None:
                 parser.error(
@@ -1688,6 +1697,7 @@ def main() -> None:
                 )
             _load_config_env_file(args.config, args)
             config = load_config(args.config)
+            config["_source_config_path"] = str(args.config.resolve())
         config = apply_environment(config, args.environment_name)
         config = apply_model_aliases(config)
         config = apply_provider_presets(config)
@@ -1800,6 +1810,13 @@ def main() -> None:
         raise SystemExit(130) from None
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(str(redact_secrets(str(exc))))
+    baseline_diff: dict[str, Any] | None = None
+    if args.baseline:
+        baseline_diff = compare_results(load_json(args.baseline), result)
+        if args.ci and not baseline_diff["ok"]:
+            raise SystemExit(1)
+        if args.json:
+            result["baseline_diff"] = baseline_diff
     print(
         json.dumps(result, indent=2)
         if args.json
@@ -1807,11 +1824,8 @@ def main() -> None:
         if args.matrix
         else console_report(result, color=sys.stdout.isatty())
     )
-    if args.baseline:
-        diff = compare_results(load_json(args.baseline), result)
-        print(_format_diff(diff))
-        if args.ci and not diff["ok"]:
-            raise SystemExit(1)
+    if baseline_diff is not None and not args.json:
+        print(_format_diff(baseline_diff))
     if path is not None:
         print(f"Saved raw result to {path}", file=sys.stderr)
     if args.approve_to and path is not None:

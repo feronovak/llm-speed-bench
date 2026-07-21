@@ -17,6 +17,7 @@ guessing its meaning.
 | `total_input_tokens`, `total_output_tokens`, `total_estimated_cost_usd` | Totals including warmups. Cost is `null` if any model has unknown pricing. |
 | `pricing_warnings` | Pricing freshness or availability warnings. |
 | `source_config` | Redacted input configuration, retained for replay and audit. |
+| `source_config_path` | Absolute source configuration path when available; `--replay` uses its adjacent `.env.production` by default. |
 
 ## Model result
 
@@ -36,7 +37,8 @@ response can be successful at HTTP/API level yet invalid for its evaluator.
 `latency_seconds`, `ttft_seconds`, and `output_tokens_per_second` are objects
 with `mean`, `min`, `p50`, `p95`, and `max` (except where a metric only has a
 meaningful subset). They are `null` when unavailable. `estimated_cost_usd` is
-`null` for unknown pricing.
+`null` for unknown pricing. Summaries also include `cached_input_tokens` when
+the provider reports cache hits; output usage includes billable reasoning tokens.
 
 `output_tokens_per_second` is also `null` when the stream was not observably
 incremental — fewer than two text chunks, or a generation window under 100 ms.

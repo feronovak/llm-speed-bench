@@ -25,6 +25,19 @@ def test_public_pricing_marks_official_snapshot():
     assert model["pricing_metadata"]["confidence"] == "official"
 
 
+def test_gemini_3_1_pricing_has_cache_and_long_context_tiers():
+    model = apply_public_pricing(
+        {"provider": "gemini", "model": "gemini-3.1-pro-preview"}
+    )
+
+    assert model["cached_input_cost_per_million"] == 0.2
+    assert model["pricing_tiers"][1] == {
+        "input_cost_per_million": 4.0,
+        "output_cost_per_million": 18.0,
+        "cached_input_cost_per_million": 0.4,
+    }
+
+
 @pytest.mark.parametrize(
     ("model_id", "input_price", "output_price"),
     [

@@ -193,6 +193,31 @@ def test_gemini_filters_non_generation_models(monkeypatch):
     assert models[0]["capabilities"]["reasoning"] is True
 
 
+def test_gemini_discovery_keeps_the_provider_order_when_creation_dates_are_absent(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "llm_preflight.catalog._get_json",
+        lambda *args, **kwargs: {
+            "models": [
+                {
+                    "name": "models/gemini-new",
+                    "supportedGenerationMethods": ["generateContent"],
+                },
+                {
+                    "name": "models/gemini-old",
+                    "supportedGenerationMethods": ["generateContent"],
+                },
+            ]
+        },
+    )
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+
+    models = discover_models({"provider": "gemini", "limit": 1})
+
+    assert [model["model"] for model in models] == ["gemini-new"]
+
+
 def test_xai_catalog_uses_native_language_models_endpoint_and_pricing(monkeypatch):
     captured = []
 

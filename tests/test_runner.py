@@ -16,6 +16,7 @@ from llm_preflight.runner import (
     save_result,
     select_custom_prompt,
     select_test_profiles,
+    result_failed,
     validate_config_validations,
 )
 
@@ -34,6 +35,25 @@ def test_benchmark_run_lock_reports_existing_run(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="already running"):
         with benchmark_run_lock(tmp_path / "results"):
             pass
+
+
+def test_result_with_a_model_that_produced_no_samples_fails_closed():
+    assert result_failed({"models": [{"summary": {"requests": 0}, "samples": []}]})
+
+
+def test_benchmark_records_the_source_config_path_without_putting_it_in_config():
+    result = run_benchmark(
+        {
+            "prompt": "Reply with ok.",
+            "models": [{"provider": "mock", "model": "local", "response": "ok"}],
+            "warmups": 0,
+            "repetitions": 1,
+            "_source_config_path": "/workspace/benchmark.json",
+        }
+    )
+
+    assert result["source_config_path"] == "/workspace/benchmark.json"
+    assert "_source_config_path" not in result["source_config"]
 
 
 def test_load_config_accepts_named_prompts_without_legacy_prompt(tmp_path):
@@ -1683,6 +1703,15 @@ def test_select_test_profiles_rejects_duplicate_and_colliding_custom_prompt_name
 def test_select_test_profiles_rejects_unknown_profile_names():
     with pytest.raises(ValueError, match="unknown profiles: bogus"):
         select_test_profiles({}, "bogus")
+
+
+def test_select_test_profiles_deduplicates_selected_custom_prompts_in_order():
+    profiles = select_test_profiles(
+        {"prompts": [{"name": "greet", "prompt": "Say hello"}]},
+        "greet,greet",
+    )
+
+    assert [profile["name"] for profile in profiles] == ["greet"]
 
 
 def test_plain_prompt_regex_validation_records_the_failure_reason(monkeypatch):

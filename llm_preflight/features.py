@@ -9,6 +9,7 @@ from typing import Any, cast
 from .catalog import resolve_models
 from .client import PROVIDER_DEFAULTS
 from .pricing import pricing_freshness_report
+from .pricing import estimate_sample_cost
 from .presets import SUPPORTED_PRESETS, expand_presets
 from .runner import select_test_profiles
 
@@ -146,10 +147,6 @@ def _budget_work(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
 def _request_cost(
     model: dict[str, Any], prompt: str, options: dict[str, Any]
 ) -> float | None:
-    input_price = model.get("input_cost_per_million")
-    output_price = model.get("output_cost_per_million")
-    if input_price is None or output_price is None:
-        return None
     system_prompt = options.get("system_prompt", "")
     system_text = (
         system_prompt
@@ -161,9 +158,9 @@ def _request_cost(
     max_output_tokens = int(
         options.get("max_output_tokens") or options.get("max_tokens") or 256
     )
-    return (
-        input_tokens * float(input_price) + max_output_tokens * float(output_price)
-    ) / 1_000_000
+    return estimate_sample_cost(
+        {"input_tokens": input_tokens, "output_tokens": max_output_tokens}, model
+    )
 
 
 def estimate_budget(config: dict[str, Any]) -> dict[str, Any]:
@@ -301,16 +298,22 @@ def compare_results(
     current: dict[str, Any],
     thresholds: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    thresholds = thresholds or {
+    defaults = {
         "latency_p95": 0.25,
         "success_rate": -0.05,
         "valid_output_rate": -0.05,
         "cost": 0.25,
     }
+    thresholds = {**defaults, **(thresholds or {})}
     previous = {
         model.get("name", model.get("model")): model for model in baseline["models"]
     }
     rows = []
+    current_names = {
+        model.get("name", model.get("model")) for model in current["models"]
+    }
+    for name in previous.keys() - current_names:
+        rows.append({"name": name, "status": "removed", "regressions": ["removed"]})
     for model in current["models"]:
         name = model.get("name", model.get("model"))
         if name not in previous:
@@ -325,9 +328,13 @@ def compare_results(
         success_delta = new_summary.get("success_rate", 0) - old_summary.get(
             "success_rate", 0
         )
-        valid_output_delta = new_summary.get(
-            "valid_output_rate", new_summary.get("success_rate", 0)
-        ) - old_summary.get("valid_output_rate", old_summary.get("success_rate", 0))
+        old_valid_output = old_summary.get("valid_output_rate")
+        new_valid_output = new_summary.get("valid_output_rate")
+        valid_output_delta = (
+            None
+            if old_valid_output is None or new_valid_output is None
+            else new_valid_output - old_valid_output
+        )
         latency_delta = (
             None
             if old_latency is None or new_latency is None
@@ -348,7 +355,10 @@ def compare_results(
             regressions.append("latency_p95")
         if success_delta < thresholds.get("success_rate", -1):
             regressions.append("success_rate")
-        if valid_output_delta < thresholds.get("valid_output_rate", -1):
+        if (
+            valid_output_delta is None
+            or valid_output_delta < thresholds["valid_output_rate"]
+        ):
             regressions.append("valid_output_rate")
         if cost_delta is not None and (
             (old_cost == 0 and cost_delta > thresholds.get("cost", 0))

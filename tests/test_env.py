@@ -1,10 +1,12 @@
 import os
 import socket
+import urllib.error
+import urllib.request
 
 import pytest
 
 from llm_preflight.env import load_env_file
-from llm_preflight.security import require_http_url
+from llm_preflight.security import NoRedirectHandler, require_http_url
 
 
 def test_loads_production_env_without_overwriting_existing_value(tmp_path, monkeypatch):
@@ -89,3 +91,11 @@ def test_require_http_url_rejects_hostname_resolving_to_private_address(monkeypa
 
     with pytest.raises(ValueError, match="public host"):
         require_http_url("https://provider.example/v1")
+
+
+def test_provider_requests_refuse_redirects_instead_of_following_to_another_host():
+    handler = NoRedirectHandler()
+    request = urllib.request.Request("https://provider.example/v1")
+
+    with pytest.raises(urllib.error.HTTPError, match="redirects are not allowed"):
+        handler.redirect_request(request, None, 302, "Found", {}, "http://127.0.0.1/")

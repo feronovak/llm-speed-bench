@@ -37,6 +37,10 @@ def _resolve_provider_hosts_to_a_public_address(monkeypatch):
         "llm_preflight.security.socket.getaddrinfo",
         lambda *args, **kwargs: [(2, 1, 6, "", ("8.8.8.8", 443))],
     )
+    monkeypatch.setattr(
+        "llm_preflight.client.open_public_url",
+        lambda request, timeout: urllib.request.urlopen(request, timeout),
+    )
 
 
 def test_factory_applies_openai_defaults():
@@ -47,6 +51,19 @@ def test_factory_applies_openai_defaults():
     body = client.body("hello", {"max_output_tokens": 1})
     assert body["max_completion_tokens"] == 1
     assert "max_tokens" not in body
+
+
+@pytest.mark.parametrize("provider", ["openai", "gemini", "openrouter", "xai"])
+def test_non_anthropic_clients_apply_the_safe_default_output_limit(provider):
+    client = create_client({"provider": provider, "model": "model-a"}, 10)
+
+    body = client.body("hello", {})
+
+    if provider == "gemini":
+        assert body["generationConfig"]["maxOutputTokens"] == 256
+    else:
+        parameter = client.model.get("max_tokens_parameter", "max_tokens")
+        assert body[parameter] == 256
 
 
 def test_runtime_url_validation_failure_becomes_a_normal_api_failure(monkeypatch):
@@ -193,11 +210,12 @@ def test_gemini_request_and_events():
             "usageMetadata": {
                 "promptTokenCount": 1,
                 "candidatesTokenCount": 2,
+                "thoughtsTokenCount": 8,
             },
         }
     )
     assert text == "hi"
-    assert usage == {"input_tokens": 1, "output_tokens": 2}
+    assert usage == {"input_tokens": 1, "output_tokens": 10}
 
 
 def test_gemini_merges_provider_specific_generation_config():

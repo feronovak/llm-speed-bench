@@ -9,11 +9,12 @@ import urllib.request
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .security import require_http_url
+from .security import open_public_url, require_http_url
 
 TokenUsage = dict[str, int | None]
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 MIN_GENERATION_WINDOW_SECONDS = 0.1
+DEFAULT_MAX_OUTPUT_TOKENS = 256
 
 
 PROVIDER_DEFAULTS = {
@@ -200,9 +201,7 @@ class ProviderClient(ABC):
                     },
                     method="POST",
                 )
-                with urllib.request.urlopen(  # nosec B310
-                    request, timeout=self.timeout
-                ) as response:
+                with open_public_url(request, timeout=self.timeout) as response:
                     response_bytes = 0
                     for raw_line in response:
                         response_bytes += len(raw_line)
@@ -262,6 +261,7 @@ class ProviderClient(ABC):
                     else None,
                     "output_tokens_per_second": throughput,
                     "input_tokens": usage.get("input_tokens"),
+                    "cached_input_tokens": usage.get("cached_input_tokens"),
                     "output_tokens": output_tokens,
                     "response_chars": sum(map(len, content)),
                     "response": "".join(content),
@@ -310,6 +310,7 @@ class ProviderClient(ABC):
             "ttft_seconds": None,
             "output_tokens_per_second": None,
             "input_tokens": None,
+            "cached_input_tokens": None,
             "output_tokens": None,
             "response_chars": 0,
             "response": "",
@@ -341,10 +342,11 @@ class OpenAICompatibleClient(ProviderClient):
         }
         if "temperature" in options and _supports_temperature(self.model):
             body["temperature"] = options["temperature"]
-        limit = options.get("max_output_tokens", options.get("max_tokens"))
-        if limit is not None:
-            parameter = self.model.get("max_tokens_parameter", "max_tokens")
-            body[parameter] = limit
+        limit = options.get(
+            "max_output_tokens", options.get("max_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
+        )
+        parameter = self.model.get("max_tokens_parameter", "max_tokens")
+        body[parameter] = limit
         body.update(
             _provider_options(options, self.model.get("provider", "openai_compatible"))
         )
@@ -354,6 +356,9 @@ class OpenAICompatibleClient(ProviderClient):
         usage = event.get("usage") or {}
         normalized = {
             "input_tokens": usage.get("prompt_tokens"),
+            "cached_input_tokens": (usage.get("prompt_tokens_details") or {}).get(
+                "cached_tokens"
+            ),
             "output_tokens": usage.get("completion_tokens"),
         }
         choices = event.get("choices") or []
@@ -373,9 +378,10 @@ class OpenAIResponsesClient(OpenAICompatibleClient):
             "input": prompt,
             "store": False,
         }
-        limit = options.get("max_output_tokens", options.get("max_tokens"))
-        if limit is not None:
-            body["max_output_tokens"] = limit
+        limit = options.get(
+            "max_output_tokens", options.get("max_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
+        )
+        body["max_output_tokens"] = limit
         return body
 
     def run(self, prompt: str, request_options: dict[str, Any]) -> dict[str, Any]:
@@ -405,7 +411,7 @@ class OpenAIResponsesClient(OpenAICompatibleClient):
                     },
                     method="POST",
                 )
-                with urllib.request.urlopen(request, timeout=self.timeout) as response:  # nosec B310
+                with open_public_url(request, timeout=self.timeout) as response:
                     body = response.read(MAX_RESPONSE_BYTES + 1)
                 if len(body) > MAX_RESPONSE_BYTES:
                     raise ValueError(
@@ -434,6 +440,9 @@ class OpenAIResponsesClient(OpenAICompatibleClient):
                     "ttft_seconds": None,
                     "output_tokens_per_second": None,
                     "input_tokens": usage.get("input_tokens"),
+                    "cached_input_tokens": (
+                        usage.get("input_tokens_details") or {}
+                    ).get("cached_tokens"),
                     "output_tokens": usage.get("output_tokens"),
                     "response_chars": len(text),
                     "response": text,
@@ -489,6 +498,7 @@ class AnthropicClient(ProviderClient):
         usage = event.get("usage") or (event.get("message") or {}).get("usage") or {}
         normalized = {
             "input_tokens": usage.get("input_tokens"),
+            "cached_input_tokens": usage.get("cache_read_input_tokens"),
             "output_tokens": usage.get("output_tokens"),
         }
         delta = event.get("delta") or {}
@@ -514,9 +524,10 @@ class GeminiClient(ProviderClient):
         generation = body["generationConfig"]
         if "temperature" in options and _supports_temperature(self.model):
             generation["temperature"] = options["temperature"]
-        limit = options.get("max_output_tokens", options.get("max_tokens"))
-        if limit is not None:
-            generation["maxOutputTokens"] = limit
+        limit = options.get(
+            "max_output_tokens", options.get("max_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
+        )
+        generation["maxOutputTokens"] = limit
         if options.get("system_prompt"):
             body["systemInstruction"] = {"parts": [{"text": options["system_prompt"]}]}
         provider_options = _provider_options(options, "gemini")
@@ -529,8 +540,13 @@ class GeminiClient(ProviderClient):
         usage = event.get("usageMetadata") or {}
         normalized = {
             "input_tokens": usage.get("promptTokenCount"),
-            "output_tokens": usage.get("candidatesTokenCount"),
+            "output_tokens": sum(
+                int(usage.get(key) or 0)
+                for key in ("candidatesTokenCount", "thoughtsTokenCount")
+            ),
         }
+        if usage.get("cachedContentTokenCount") is not None:
+            normalized["cached_input_tokens"] = usage["cachedContentTokenCount"]
         candidates = event.get("candidates") or []
         parts = (
             ((candidates[0].get("content") or {}).get("parts") or [])

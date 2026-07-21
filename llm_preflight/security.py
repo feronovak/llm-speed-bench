@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import urllib.parse
+import urllib.error
+import urllib.request
 from ipaddress import ip_address
 import socket
 
@@ -32,3 +34,23 @@ def require_http_url(url: str, *, resolve_host: bool = True) -> None:
         return
     if not address.is_global:
         raise ValueError("URL must use a public host")
+
+
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Fail closed: provider calls must not cross an unvalidated redirect."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        raise urllib.error.HTTPError(
+            req.full_url,
+            code,
+            "redirects are not allowed for provider requests",
+            headers,
+            fp,
+        )
+
+
+def open_public_url(request: urllib.request.Request, timeout: float):
+    """Open a validated public URL without allowing redirect-based SSRF."""
+    require_http_url(request.full_url)
+    opener = urllib.request.build_opener(NoRedirectHandler())
+    return opener.open(request, timeout=timeout)

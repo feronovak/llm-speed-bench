@@ -375,6 +375,78 @@ def test_compare_results_reports_new_models_as_added_without_regressions():
     assert diff["ok"] is True
 
 
+def test_compare_results_keeps_default_gates_when_one_threshold_is_overridden():
+    baseline = {"models": [{"name": "model", "summary": _summary(1.0, 0.01)}]}
+    current = {"models": [{"name": "model", "summary": _summary(3.0, 0.01)}]}
+
+    diff = compare_results(baseline, current, {"cost": 1.0})
+
+    assert "latency_p95" in diff["models"][0]["regressions"]
+
+
+def test_compare_results_flags_a_model_removed_since_the_baseline():
+    diff = compare_results(
+        {"models": [{"name": "required", "summary": _summary(1.0, 0.01)}]},
+        {"models": []},
+    )
+
+    assert diff["ok"] is False
+    assert diff["models"] == [
+        {"name": "required", "status": "removed", "regressions": ["removed"]}
+    ]
+
+
+def test_compare_results_does_not_treat_missing_validation_evidence_as_success():
+    baseline = {
+        "models": [
+            {
+                "name": "model",
+                "summary": {**_summary(1.0, 0.01), "valid_output_rate": 1},
+            }
+        ]
+    }
+    current = {"models": [{"name": "model", "summary": _summary(1.0, 0.01)}]}
+
+    assert (
+        "valid_output_rate"
+        in compare_results(baseline, current)["models"][0]["regressions"]
+    )
+
+
+def test_budget_uses_the_long_context_price_tier(monkeypatch):
+    monkeypatch.setattr(
+        "llm_preflight.features.resolve_models",
+        lambda _config: [
+            {
+                "provider": "gemini",
+                "model": "tiered",
+                "input_cost_per_million": 1,
+                "output_cost_per_million": 2,
+                "pricing_tiers": [
+                    {
+                        "up_to_input_tokens": 2,
+                        "input_cost_per_million": 1,
+                        "output_cost_per_million": 2,
+                    },
+                    {"input_cost_per_million": 4, "output_cost_per_million": 8},
+                ],
+            }
+        ],
+    )
+
+    budget = estimate_budget(
+        {
+            "prompt": "0123456789abcdef",
+            "models": [{"provider": "gemini", "model": "tiered"}],
+            "repetitions": 1,
+            "warmups": 0,
+            "request": {"max_output_tokens": 10},
+        }
+    )
+
+    assert budget["estimated_cost_usd"] == pytest.approx(0.000096)
+
+
 def test_replay_config_requires_a_saved_source_config():
     with pytest.raises(ValueError, match="cannot replay exactly"):
         replay_config({"models": []})

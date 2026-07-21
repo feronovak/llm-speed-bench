@@ -60,6 +60,13 @@ def _should_keep_response(config: dict[str, Any], sample: dict[str, Any]) -> boo
 
 
 def model_failed(model: dict[str, Any]) -> bool:
+    profiles = model.get("profiles", [])
+    if profiles and any(
+        profile["summary"].get("requests") == 0 for profile in profiles
+    ):
+        return True
+    if not profiles and model.get("summary", {}).get("requests") == 0:
+        return True
     return model_has_api_error(model) or model_has_test_failure(model)
 
 
@@ -257,7 +264,7 @@ def custom_prompt_profile(prompt: dict[str, Any]) -> dict[str, Any]:
 
 
 def select_test_profiles(config: dict[str, Any], selector: str) -> list[dict[str, Any]]:
-    requested = normalize_profile_selector(selector).split(",")
+    requested = list(dict.fromkeys(normalize_profile_selector(selector).split(",")))
     builtins_all = select_profiles("all")
     builtin_names = [profile["name"] for profile in builtins_all]
     prompt_names = [prompt["name"] for prompt in config.get("prompts", [])]
@@ -867,7 +874,13 @@ def run_benchmark(
         },
         "models": models_result,
         "pricing_warnings": pricing_freshness_report(models)["warnings"],
-        "source_config": redact_secrets(config),
+        "source_config": redact_secrets(
+            {
+                key: value
+                for key, value in config.items()
+                if key != "_source_config_path"
+            }
+        ),
         "total_input_tokens": sum(
             model[summary]["input_tokens"]
             for model in models_result
@@ -882,6 +895,8 @@ def run_benchmark(
             sum(costs) if all(cost is not None for cost in costs) else None
         ),
     }
+    if config.get("_source_config_path"):
+        result["source_config_path"] = config["_source_config_path"]
     return redact_secrets(result)
 
 

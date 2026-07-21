@@ -9,7 +9,7 @@ from typing import Any
 
 from .client import PROVIDER_DEFAULTS
 from .pricing import apply_public_pricing
-from .security import require_http_url
+from .security import open_public_url, require_http_url
 
 
 _MAX_CATALOG_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -91,7 +91,7 @@ def _get_json(
     if key:
         request_headers.setdefault("Authorization", f"Bearer {key}")
     request = urllib.request.Request(url, headers=request_headers)
-    with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310
+    with open_public_url(request, timeout=30) as response:
         body = response.read(_MAX_CATALOG_RESPONSE_BYTES + 1)
     if len(body) > _MAX_CATALOG_RESPONSE_BYTES:
         raise ValueError("catalog response exceeded the 8 MiB safety limit")
@@ -336,7 +336,9 @@ def discover_models(source: dict[str, Any]) -> list[dict[str, Any]]:
         models = [
             model for model in models if not re.search(exclude, model["model"], re.I)
         ]
-    if not source.get("sort"):
+    if not source.get("sort") and any(
+        model.get("created") is not None for model in models
+    ):
         models.sort(key=lambda model: str(model.get("created") or ""), reverse=True)
     inherited: dict[str, Any] = {
         key: source[key]

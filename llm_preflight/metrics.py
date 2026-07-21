@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, cast
+
+from .pricing import estimate_sample_cost
 
 
 def percentile(values: Iterable[float], p: float) -> float | None:
@@ -101,14 +103,20 @@ def summarize(samples: list[dict[str, Any]], model: dict[str, Any]) -> dict[str,
 
     input_tokens = sum(usage_numbers("input_tokens"))
     output_tokens = sum(usage_numbers("output_tokens"))
-    input_price = model.get("input_cost_per_million")
-    output_price = model.get("output_cost_per_million")
-    cost = None
-    if input_price is not None and output_price is not None:
-        cost = (
-            input_tokens * float(input_price) / 1_000_000
-            + output_tokens * float(output_price) / 1_000_000
-        )
+    sample_costs = [
+        estimate_sample_cost(sample, model)
+        for sample in samples
+        if sample.get("input_tokens") is not None
+        and sample.get("output_tokens") is not None
+    ]
+    known_sample_costs = [
+        cast(float, value) for value in sample_costs if value is not None
+    ]
+    cost = (
+        sum(known_sample_costs)
+        if len(known_sample_costs) == len(sample_costs)
+        else None
+    )
 
     return {
         "requests": len(samples),
@@ -127,6 +135,7 @@ def summarize(samples: list[dict[str, Any]], model: dict[str, Any]) -> dict[str,
             successful_numbers("output_tokens_per_second")
         ),
         "input_tokens": int(input_tokens),
+        "cached_input_tokens": int(sum(usage_numbers("cached_input_tokens"))),
         "output_tokens": int(output_tokens),
         "estimated_cost_usd": cost,
         "failure_reasons": failure_reasons,

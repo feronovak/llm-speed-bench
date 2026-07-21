@@ -52,8 +52,11 @@ through OpenRouter. Selected direct OpenAI, Gemini, Anthropic, and xAI prices
 are maintained as timestamped `official snapshot` records. Unknown prices stay
 unknown; the tool never silently treats an OpenRouter route as a direct-provider
 price.
-Explicit per-model prices override the registry. Estimated spend excludes taxes,
-account-specific discounts, cache discounts, tool fees, and similar adjustments.
+Explicit per-model prices override the registry. When a provider reports cache-hit
+tokens, the estimate applies the model's cached-input rate. Gemini 3.1 Pro
+Preview also uses its published per-request 200k-input tier, including thinking
+tokens in output usage. Estimates still exclude taxes, cache-storage fees, tool
+fees, and account-specific discounts not reported in usage.
 
 Run `--dry-run` or `--pricing-check` after pricing edits. Treat unknown or
 stale prices as a reason not to compare cost rankings.

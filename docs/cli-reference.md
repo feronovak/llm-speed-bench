@@ -22,7 +22,7 @@ release. `config` is a benchmark JSON path and is required unless `--init`,
 | `--matrix` | off | Print model-by-test quality matrix instead of the normal report. |
 | `--quick TEXT` | — | Run one ad hoc prompt; requires `--models`. |
 | `--init [PATH]` | `benchmark.json` | Create a no-key mock config without overwriting a file. |
-| `--models LIST` | — | Comma-separated `provider:model` list for `--quick`. |
+| `--models LIST` | — | Comma-separated `provider:model` list for `--quick`. An unprefixed ID is accepted only for recognizable OpenAI IDs. |
 | `--diff BASELINE CURRENT` | — | Compare two saved JSON result files; no benchmark run. |
 | `--replay PATH` | — | Re-run the saved source configuration in a result artifact. |
 | `--changed-since PATH` | — | With discovery, run models absent from a prior catalog JSON. |
@@ -41,7 +41,8 @@ release. `config` is a benchmark JSON path and is required unless `--init`,
 ## Compatible combinations
 
 - `--json` works with benchmark results, `--dry-run`, `--doctor`, `--diff`,
-  and `--catalog`. `--pricing-check` and `--catalog` always print JSON.
+  `--baseline`, and `--catalog`. With `--baseline`, the comparison is embedded
+  as `baseline_diff` in the single JSON result document.
 - `--ci` gates `--diff` and `--baseline`; ordinary benchmark failures already
   exit with status 1.
 - `--smoke`, `--env`, `--tests`, `--dry-run`, `--json`, `--no-save`, and

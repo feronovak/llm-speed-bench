@@ -27,6 +27,59 @@ PUBLIC_PRICING: dict[tuple[str, str], tuple[float, float, str]] = {
     ("xai", "grok-4.3"): (1.25, 2.5, "2026-07-09"),
 }
 
+PUBLIC_PRICING_DETAILS: dict[tuple[str, str], dict[str, Any]] = {
+    ("gemini", "gemini-3.1-pro-preview"): {
+        "cached_input_cost_per_million": 0.2,
+        "pricing_tiers": [
+            {
+                "up_to_input_tokens": 200_000,
+                "input_cost_per_million": 2.0,
+                "output_cost_per_million": 12.0,
+                "cached_input_cost_per_million": 0.2,
+            },
+            {
+                "input_cost_per_million": 4.0,
+                "output_cost_per_million": 18.0,
+                "cached_input_cost_per_million": 0.4,
+            },
+        ],
+    }
+}
+
+
+def _pricing_tier(model: dict[str, Any], input_tokens: int) -> dict[str, Any]:
+    tiers = model.get("pricing_tiers")
+    if isinstance(tiers, list):
+        for tier in tiers:
+            if not isinstance(tier, dict):
+                continue
+            maximum = tier.get("up_to_input_tokens")
+            if maximum is None or input_tokens <= int(maximum):
+                return {**model, **tier}
+    return model
+
+
+def estimate_sample_cost(sample: dict[str, Any], model: dict[str, Any]) -> float | None:
+    """Estimate one request using its cache hits and applicable input tier."""
+    input_tokens = sample.get("input_tokens")
+    output_tokens = sample.get("output_tokens")
+    if input_tokens is None or output_tokens is None:
+        return None
+    tier = _pricing_tier(model, int(input_tokens))
+    input_price = tier.get("input_cost_per_million")
+    output_price = tier.get("output_cost_per_million")
+    if input_price is None or output_price is None:
+        return None
+    cached_input = min(
+        max(0, int(sample.get("cached_input_tokens") or 0)), int(input_tokens)
+    )
+    cached_price = tier.get("cached_input_cost_per_million", input_price)
+    return (
+        (int(input_tokens) - cached_input) * float(input_price) / 1_000_000
+        + cached_input * float(cached_price) / 1_000_000
+        + int(output_tokens) * float(output_price) / 1_000_000
+    )
+
 
 def apply_public_pricing(model: dict[str, Any]) -> dict[str, Any]:
     if (
@@ -45,6 +98,7 @@ def apply_public_pricing(model: dict[str, Any]) -> dict[str, Any]:
         **model,
         "input_cost_per_million": input_price,
         "output_cost_per_million": output_price,
+        **PUBLIC_PRICING_DETAILS.get(key, {}),
         "pricing_metadata": {
             "source": "official snapshot",
             "confidence": "official",

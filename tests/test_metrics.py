@@ -58,6 +58,51 @@ def test_summary_counts_billable_tokens_for_validation_failures():
     assert result["estimated_cost_usd"] == pytest.approx(0.00002)
 
 
+def test_summary_uses_cached_input_and_per_request_pricing_tiers():
+    samples = [
+        {
+            "ok": True,
+            "latency_seconds": 1,
+            "ttft_seconds": 0.1,
+            "output_tokens_per_second": 2,
+            "input_tokens": 100,
+            "cached_input_tokens": 80,
+            "output_tokens": 10,
+        },
+        {
+            "ok": True,
+            "latency_seconds": 1,
+            "ttft_seconds": 0.1,
+            "output_tokens_per_second": 2,
+            "input_tokens": 201,
+            "output_tokens": 10,
+        },
+    ]
+    model = {
+        "input_cost_per_million": 1,
+        "output_cost_per_million": 2,
+        "cached_input_cost_per_million": 0.25,
+        "pricing_tiers": [
+            {
+                "up_to_input_tokens": 200,
+                "input_cost_per_million": 1,
+                "output_cost_per_million": 2,
+                "cached_input_cost_per_million": 0.25,
+            },
+            {
+                "input_cost_per_million": 4,
+                "output_cost_per_million": 8,
+                "cached_input_cost_per_million": 1,
+            },
+        ],
+    }
+
+    result = summarize(samples, model)
+
+    assert result["cached_input_tokens"] == 80
+    assert result["estimated_cost_usd"] == pytest.approx(0.000944)
+
+
 def test_summary_records_retry_accounting_and_failure_categories():
     samples = [
         {

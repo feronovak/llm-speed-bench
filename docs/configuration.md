@@ -92,6 +92,10 @@ Presets translate intent into provider-aware options. Available presets are
 `json`, `no-reasoning`, `low-latency`, and `structured`. Explicit request
 values always win over preset defaults.
 
+All native providers use a safe default output limit of 256 tokens when neither
+`max_output_tokens` nor `max_tokens` is set. Set an explicit limit for tasks
+that need longer responses; this makes cost comparisons intentional and fair.
+
 ### Structured contracts by provider
 
 Use the same JSON Schema contract for every candidate model, but keep the
