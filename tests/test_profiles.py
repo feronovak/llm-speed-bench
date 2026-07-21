@@ -11,6 +11,11 @@ def test_all_selects_every_supported_profile_except_coding():
         "structured-output-check",
         "numeric-instruction-check",
         "concurrency-health-check",
+        "strict-json-extraction",
+        "support-classification",
+        "code-patch-summary",
+        "source-grounded-quiz",
+        "refusal-boundary-check",
     ]
 
 
@@ -19,6 +24,18 @@ def test_profile_list_accepts_legacy_names_and_returns_clear_canonical_names():
     assert [profile["name"] for profile in profiles] == [
         "quick-migration-check",
         "numeric-instruction-check",
+    ]
+
+
+def test_agent_smoke_selects_curated_functional_contracts_without_load():
+    profiles = select_profiles("agent-smoke")
+
+    assert [profile["name"] for profile in profiles] == [
+        "strict-json-extraction",
+        "support-classification",
+        "code-patch-summary",
+        "source-grounded-quiz",
+        "refusal-boundary-check",
     ]
 
 
@@ -58,6 +75,49 @@ def test_contains_evaluator_rejects_an_empty_expected_value():
     result = evaluate_response("anything", {"type": "contains", "contains": ""})
 
     assert result["valid"] is False
+
+
+@pytest.mark.parametrize(
+    ("evaluator", "response", "valid"),
+    [
+        ({"type": "json_object"}, '{"status":"ok"}', True),
+        ({"type": "json_object"}, '["ok"]', False),
+        ({"type": "json_array"}, '["one","two"]', True),
+        ({"type": "json_array"}, '{"one":1}', False),
+        ({"type": "no_markdown"}, "Plain text only.", True),
+        ({"type": "no_markdown"}, "```json\n{}\n```", False),
+        ({"type": "exact_count", "expected": 2}, '["one","two"]', True),
+        ({"type": "exact_count", "expected": 2}, '["one"]', False),
+        (
+            {"type": "allowed_values", "values": ["billing", "technical"]},
+            "Billing",
+            True,
+        ),
+        (
+            {"type": "allowed_values", "values": ["billing", "technical"]},
+            "account",
+            False,
+        ),
+        ({"type": "max_chars", "maximum": 5}, "short", True),
+        ({"type": "max_chars", "maximum": 5}, "too long", False),
+    ],
+)
+def test_common_contract_evaluators(evaluator, response, valid):
+    assert evaluate_response(response, evaluator)["valid"] is valid
+
+
+def test_composite_evaluator_requires_every_contract():
+    evaluator = {
+        "type": "all",
+        "evaluators": [
+            {"type": "json_object"},
+            {"type": "no_markdown"},
+            {"type": "max_chars", "maximum": 20},
+        ],
+    }
+
+    assert evaluate_response('{"ok":true}', evaluator)["valid"] is True
+    assert evaluate_response('```json\n{"ok":true}\n```', evaluator)["valid"] is False
 
 
 @pytest.mark.parametrize(

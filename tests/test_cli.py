@@ -173,7 +173,7 @@ def test_interactive_selection_numbers_custom_prompts_after_builtin_profiles(
         lambda config: [{"provider": "openai", "model": "gpt-5.5"}],
     )
     output = []
-    answers = iter(["all", "1,6,7", "1", "", "y"])
+    answers = iter(["all", "1,11,12", "1", "", "y"])
 
     selected = interactive_selection(
         {
@@ -190,8 +190,8 @@ def test_interactive_selection_numbers_custom_prompts_after_builtin_profiles(
     config, profiles = selected
     assert profiles == "quick-migration-check,csv-review,source-to-quiz"
     assert config["repetitions"] == 1
-    assert any("6. csv-review" in line for line in output)
-    assert any("7. source-to-quiz" in line for line in output)
+    assert any("11. csv-review" in line for line in output)
+    assert any("12. source-to-quiz" in line for line in output)
 
 
 def test_main_selects_named_custom_prompt_non_interactively(
@@ -496,7 +496,7 @@ def test_interactive_selection_explains_functional_tests_request_breakdown(monke
 
     assert any("quick-migration-check: 3" in line for line in output)
     assert not any("concurrency-health-check:" in line for line in output)
-    assert any("12 nominal requests, up to 24 with retries" in line for line in output)
+    assert any("18 nominal requests, up to 36 with retries" in line for line in output)
     breakdown_index = output.index("Request breakdown per model:")
     assert output[breakdown_index - 1] == ""
 
@@ -1425,7 +1425,8 @@ def test_interactive_watch_all_excludes_the_paid_concurrency_profile():
     assert selected is not None
     assert selected[1] == (
         "quick-migration-check,exact-routing-check,structured-output-check,"
-        "numeric-instruction-check"
+        "numeric-instruction-check,strict-json-extraction,support-classification,"
+        "code-patch-summary,source-grounded-quiz,refusal-boundary-check"
     )
 
 
@@ -1848,7 +1849,7 @@ def test_main_dry_run_explains_all_tests_load_expansion(monkeypatch, tmp_path, c
         "requests_per_model": 16,
         "details": "load levels: c1=1, c5=5, c10=10",
     }
-    assert output["requests"] == 28
+    assert output["requests"] == 34
 
 
 def test_main_enforces_budget_for_tests_selected_on_command_line(monkeypatch, tmp_path):

@@ -162,8 +162,47 @@ def test_custom_prompt_profile_preserves_fenced_json_policy():
 
 
 def test_validation_rejects_fenced_json_policy_without_a_json_validator():
-    with pytest.raises(ValueError, match="allow_fenced_json requires json_schema"):
+    with pytest.raises(ValueError, match="allow_fenced_json requires a JSON validator"):
         validate_config_validations({"validation": {"allow_fenced_json": True}})
+
+
+def test_custom_prompt_profile_combines_common_validators():
+    profile = custom_prompt_profile(
+        {
+            "name": "contract",
+            "prompt": "Return a short JSON object.",
+            "validation": {
+                "json_object": True,
+                "no_markdown": True,
+                "max_chars": 40,
+            },
+        }
+    )
+
+    assert profile["cases"][0]["evaluator"] == {
+        "type": "all",
+        "evaluators": [
+            {"type": "json_object"},
+            {"type": "no_markdown"},
+            {"type": "max_chars", "maximum": 40},
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("validation", "message"),
+    [
+        ({"json_object": "yes"}, "json_object must be a boolean"),
+        ({"exact_count": -1}, "exact_count must be a non-negative integer"),
+        ({"exact_count": 2}, "exact_count requires json_array"),
+        ({"allowed_values": []}, "allowed_values must be a non-empty list"),
+        ({"numeric_tolerance": 1}, "numeric_tolerance requires numeric_answer"),
+        ({"max_chars": 1.5}, "max_chars must be a non-negative integer"),
+    ],
+)
+def test_common_validator_configuration_is_checked(validation, message):
+    with pytest.raises(ValueError, match=message):
+        validate_config_validations({"validation": validation})
 
 
 def test_report_handles_missing_usage():

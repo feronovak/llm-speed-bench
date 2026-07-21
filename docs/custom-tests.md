@@ -68,12 +68,34 @@ Use the strictest rule that expresses your requirement:
 | A fixed label or exactly one allowed answer | `exact` or `regex`, for example `"^billing$"` |
 | A required phrase, identifier, or citation | `contains` |
 | A stable structured payload | `json_schema` |
+| Any JSON object or array | `json_object` or `json_array` |
+| A JSON array with a fixed number of items | `json_array` plus `exact_count` |
+| One of several controlled labels | `allowed_values` |
+| A numeric-only output, optionally with tolerance | `numeric_answer` and `numeric_tolerance` |
+| A response with a hard size limit | `max_chars` |
+| Plain text without Markdown formatting | `no_markdown` |
 | A flexible user-facing response | Start with `contains`, then add a human review case if wording matters |
 
 Do not validate an open-ended answer with exact text unless the exact text is
 truly a product requirement. That creates false failures from otherwise valid
 wording changes. Conversely, do not use a loose `contains` rule for an output
 your code parses—validate the JSON structure instead.
+
+Rules in one `validation` object are combined: every supplied rule must pass.
+For example, this accepts only a raw JSON array with two items, at most 240
+characters long:
+
+```json
+"validation": {
+  "json_array": true,
+  "exact_count": 2,
+  "max_chars": 240
+}
+```
+
+`no_markdown` rejects fenced blocks, headings, and list formatting. `max_chars`
+counts the response exactly as received, including whitespace. `allowed_values`
+matches a whole response without regard to case or surrounding whitespace.
 
 ## A production JSON contract
 
@@ -118,7 +140,8 @@ llm-preflight benchmark.json --tests ticket-contract
 
 ## Match the deployed JSON parser
 
-The default `json_schema` contract requires raw JSON. That is the right choice
+The default JSON validators (`json_schema`, `json_object`, `json_array`, and
+`exact_count`) require raw JSON. That is the right choice
 when the application sends the model response straight to `json.loads` or an
 equivalent strict parser. If the deployed consumer accepts one complete fenced
 JSON block, make that acceptance explicit instead of treating a fenced response
@@ -136,6 +159,28 @@ block, including when prose surrounds that block. It deliberately rejects
 multiple blocks and unfenced JSON objects in prose, because preflight should not
 guess which payload a production parser would consume. Failed-response artifacts
 record `json_parsing_policy` alongside the retained response preview.
+
+## Keep generated contracts in sync
+
+When an application assembles prompts dynamically, keep the prompt builder and
+its parser contract in that application. A small application-owned generator can
+write an ordinary LLM Preflight JSON config from those sources, then commit the
+generated config for review. LLM Preflight intentionally does not import or run
+arbitrary application code.
+
+Treat the generated JSON like any other config: validate it without generation
+before a paid run, and add a project test that regenerates it in a temporary
+path and compares it with the committed file.
+
+```bash
+python scripts/generate_benchmark.py
+llm-preflight generated-benchmark.json --dry-run --json
+```
+
+Use `prompt_file` for large static prompt text. For dynamic prompts, let the
+application generator own fixture selection and any mapping from its parser to
+the JSON Schema subset. This preserves one source of truth without giving the
+CLI permission to execute project code.
 
 ## Keep contracts useful
 

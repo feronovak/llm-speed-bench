@@ -92,6 +92,23 @@ Presets translate intent into provider-aware options. Available presets are
 `json`, `no-reasoning`, `low-latency`, and `structured`. Explicit request
 values always win over preset defaults.
 
+### Structured contracts by provider
+
+Use the same JSON Schema contract for every candidate model, but keep the
+acceptance boundary aligned with the application that consumes its response.
+
+| Provider family | `structured` preset behavior | Contract guidance |
+|---|---|---|
+| OpenAI / Codex models | Requests `json_object` response format. | Keep raw JSON validation unless the deployed parser deliberately accepts fenced JSON. |
+| Claude | Uses the prompt and validator; no Anthropic-specific JSON field is forced. | Use `json_schema` plus a clear JSON-only instruction. Set `allow_fenced_json` only when the deployed parser accepts one fenced block. |
+| Gemini | Requests `application/json` MIME output and suppresses returned thoughts. | Keep the schema strict and inspect failed responses for safety or format changes. |
+
+For a low-cost, production-shaped functional check, select the recommended
+suite with `--tests agent-smoke --smoke`. It covers strict JSON extraction,
+support classification, a code-patch summary, a source-grounded quiz, and a
+privacy boundary. It deliberately excludes the opt-in `load` concurrency
+profile.
+
 ```json
 {
   "aliases": {"fast": {"provider": "openai", "model": "gpt-5.4-mini"}},

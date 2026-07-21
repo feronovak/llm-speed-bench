@@ -187,18 +187,52 @@ def select_custom_prompt(config: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def _validation_evaluator(validation: dict[str, Any]) -> dict[str, Any]:
+    evaluators: list[dict[str, Any]] = []
     if "json_schema" in validation:
         evaluator = {"type": "json_schema", "schema": validation["json_schema"]}
         if "allow_fenced_json" in validation:
             evaluator["allow_fenced_json"] = validation["allow_fenced_json"]
-        return evaluator
+        evaluators.append(evaluator)
+    for key, evaluator_type in (
+        ("json_object", "json_object"),
+        ("json_array", "json_array"),
+    ):
+        if validation.get(key):
+            evaluator = {"type": evaluator_type}
+            if "allow_fenced_json" in validation:
+                evaluator["allow_fenced_json"] = validation["allow_fenced_json"]
+            evaluators.append(evaluator)
+    if "exact_count" in validation:
+        evaluator = {"type": "exact_count", "expected": validation["exact_count"]}
+        if "allow_fenced_json" in validation:
+            evaluator["allow_fenced_json"] = validation["allow_fenced_json"]
+        evaluators.append(evaluator)
+    if validation.get("no_markdown"):
+        evaluators.append({"type": "no_markdown"})
+    if "allowed_values" in validation:
+        evaluators.append(
+            {"type": "allowed_values", "values": validation["allowed_values"]}
+        )
+    if "numeric_answer" in validation:
+        evaluator = {"type": "numeric_answer", "expected": validation["numeric_answer"]}
+        if "numeric_tolerance" in validation:
+            evaluator["tolerance"] = validation["numeric_tolerance"]
+        evaluators.append(evaluator)
+    if "max_chars" in validation:
+        evaluators.append({"type": "max_chars", "maximum": validation["max_chars"]})
     if "regex" in validation:
-        return {"type": "regex", "regex": validation["regex"]}
+        evaluators.append({"type": "regex", "regex": validation["regex"]})
     if "contains" in validation:
-        return {"type": "contains", "contains": validation["contains"]}
+        evaluators.append({"type": "contains", "contains": validation["contains"]})
     if "exact" in validation:
-        return {"type": "exact", "expected": validation["exact"]}
-    return {"type": "nonempty"}
+        evaluators.append({"type": "exact", "expected": validation["exact"]})
+    if not evaluators:
+        return {"type": "nonempty"}
+    return (
+        evaluators[0]
+        if len(evaluators) == 1
+        else {"type": "all", "evaluators": evaluators}
+    )
 
 
 def custom_prompt_profile(prompt: dict[str, Any]) -> dict[str, Any]:
@@ -257,37 +291,13 @@ def _validate(sample: dict[str, Any], validation: dict[str, Any]) -> None:
         sample["valid_output"] = False
         sample["evaluation_error"] = "request failed"
         return
-    response = sample["response"]
-    sample["valid_output"] = True
-    sample["evaluation_error"] = None
-    if "contains" in validation and (
-        not validation["contains"] or validation["contains"] not in response
-    ):
-        sample["valid_output"] = False
-        sample["evaluation_error"] = (
-            f"response did not contain {validation['contains']!r}"
-        )
-    if "regex" in validation and not re.search(validation["regex"], response):
-        sample["valid_output"] = False
-        sample["evaluation_error"] = (
-            f"response did not match regex {validation['regex']!r}"
-        )
-    if "exact" in validation and (
-        response.strip().casefold() != str(validation["exact"]).strip().casefold()
-    ):
-        sample["valid_output"] = False
-        sample["evaluation_error"] = "exact match failed"
-    if "json_schema" in validation:
-        evaluation = evaluate_response(
-            response,
-            _validation_evaluator(validation),
-        )
-        sample["json_parsing_policy"] = json_parsing_policy(
-            _validation_evaluator(validation)
-        )
-        if not evaluation["valid"]:
-            sample["valid_output"] = False
-            sample["evaluation_error"] = evaluation["error"]
+    evaluator = _validation_evaluator(validation)
+    evaluation = evaluate_response(sample["response"], evaluator)
+    sample["valid_output"] = evaluation["valid"]
+    sample["evaluation_error"] = evaluation["error"]
+    parsing_policy = json_parsing_policy(evaluator)
+    if parsing_policy:
+        sample["json_parsing_policy"] = parsing_policy
     _add_response_preview(sample)
 
 
@@ -299,7 +309,21 @@ def validate_config_validations(config: dict[str, Any]) -> None:
             return
         if not isinstance(validation, dict):
             raise ValueError(f"{location} must be an object")
-        allowed = {"contains", "regex", "json_schema", "exact", "allow_fenced_json"}
+        allowed = {
+            "contains",
+            "regex",
+            "json_schema",
+            "exact",
+            "allow_fenced_json",
+            "json_object",
+            "json_array",
+            "no_markdown",
+            "exact_count",
+            "allowed_values",
+            "numeric_answer",
+            "numeric_tolerance",
+            "max_chars",
+        }
         unknown = sorted(set(validation) - allowed)
         if unknown:
             raise ValueError(f"unknown validation keys: {', '.join(unknown)}")
@@ -307,9 +331,67 @@ def validate_config_validations(config: dict[str, Any]) -> None:
             not isinstance(validation["contains"], str) or not validation["contains"]
         ):
             raise ValueError(f"{location}.contains must be a non-empty string")
+        for key in ("json_object", "json_array", "no_markdown"):
+            if key in validation and not isinstance(validation[key], bool):
+                raise ValueError(f"{location}.{key} must be a boolean")
+        if validation.get("json_object") and validation.get("json_array"):
+            raise ValueError(
+                f"{location} cannot require both json_object and json_array"
+            )
+        if "exact_count" in validation:
+            if (
+                isinstance(validation["exact_count"], bool)
+                or not isinstance(validation["exact_count"], int)
+                or validation["exact_count"] < 0
+            ):
+                raise ValueError(
+                    f"{location}.exact_count must be a non-negative integer"
+                )
+            if not validation.get("json_array"):
+                raise ValueError(f"{location}.exact_count requires json_array")
+        if "allowed_values" in validation and (
+            not isinstance(validation["allowed_values"], list)
+            or not validation["allowed_values"]
+            or any(
+                not isinstance(value, str) or not value
+                for value in validation["allowed_values"]
+            )
+        ):
+            raise ValueError(
+                f"{location}.allowed_values must be a non-empty list of strings"
+            )
+        if "numeric_answer" in validation and (
+            isinstance(validation["numeric_answer"], bool)
+            or not isinstance(validation["numeric_answer"], int | float)
+        ):
+            raise ValueError(f"{location}.numeric_answer must be a number")
+        if "numeric_tolerance" in validation:
+            if "numeric_answer" not in validation:
+                raise ValueError(
+                    f"{location}.numeric_tolerance requires numeric_answer"
+                )
+            if (
+                isinstance(validation["numeric_tolerance"], bool)
+                or not isinstance(validation["numeric_tolerance"], int | float)
+                or validation["numeric_tolerance"] < 0
+            ):
+                raise ValueError(
+                    f"{location}.numeric_tolerance must be a non-negative number"
+                )
+        if "max_chars" in validation and (
+            isinstance(validation["max_chars"], bool)
+            or not isinstance(validation["max_chars"], int)
+            or validation["max_chars"] < 0
+        ):
+            raise ValueError(f"{location}.max_chars must be a non-negative integer")
         if "allow_fenced_json" in validation:
-            if "json_schema" not in validation:
-                raise ValueError(f"{location}.allow_fenced_json requires json_schema")
+            if not any(
+                validation.get(key)
+                for key in ("json_schema", "json_object", "json_array")
+            ):
+                raise ValueError(
+                    f"{location}.allow_fenced_json requires a JSON validator"
+                )
             if not isinstance(validation["allow_fenced_json"], bool):
                 raise ValueError(f"{location}.allow_fenced_json must be a boolean")
 

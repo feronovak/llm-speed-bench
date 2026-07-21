@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## 2.1.0 - 2026-07-21
+
+### Added
+
+- Add composable custom validation rules for JSON object or array shape, exact
+  JSON array count, controlled values, numeric-only answers, maximum response
+  length, and plain-text responses without Markdown formatting.
+- Add curated, task-focused smoke packs for strict JSON extraction, support
+  classification, code-patch summaries, source-grounded quizzes, and privacy
+  boundaries. `agent-smoke` now selects this safe functional suite and excludes
+  the opt-in concurrency load profile.
+
+### Changed
+
+- Document how to combine response contracts and how their parsing and
+  comparison boundaries work.
+
 ## 2.0.5 - 2026-07-21
 
 ### Fixed
